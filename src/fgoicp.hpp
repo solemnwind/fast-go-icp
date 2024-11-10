@@ -1,7 +1,23 @@
-#ifndef FGOICP_H
-#define FGOICP_H
-#include <tinyply.h>
+#ifndef FGOICP_HPP
+#define FGOICP_HPP
 
-int foo();
+#include "common.hpp"
 
-#endif // FGOICP_H
+namespace icp
+{
+    class PointCloudRegistration
+    {
+        public:
+            PointCloudRegistration(std::string config_path) : config{config_path} {};
+            ~PointCloudRegistration() {};
+
+            void initialize();
+            //void run();
+
+        private:
+            icp::Config config;
+
+    };
+}
+
+#endif // FGOICP_HPP
