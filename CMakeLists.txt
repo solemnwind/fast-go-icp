@@ -11,7 +11,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Set the source and include directories
 set(SRC_DIR "${CMAKE_SOURCE_DIR}/src")
-set(EXTERNAL_DIR "${CMAKE_SOURCE_DIR}/external")
+set(EXTERNAL_DIR "${CMAKE_SOURCE_DIR}/external/include")
 
 # Add the external directory to the include path
 include_directories(${EXTERNAL_DIR})
