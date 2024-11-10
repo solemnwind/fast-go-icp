@@ -1,12 +1,16 @@
 #include "common.hpp"
 #include <iostream>
+#include <random>
 #include "toml.hpp"
 #define TINYPLY_IMPLEMENTATION
 #include "tinyply.h"
 
+#define clamp(x, min, max) (x) < (max) ? ((x) > (min) ? (x) : (min)) : (max)
+
 namespace icp
 {
     Config::Config(const string toml_filepath) :
+        trim(false), subsample(1.0f), mse_threshold(1e-5f),
         io{"", "", "", ""},
         rotation{0, 0, 0, 0, 0, 0},
         translation{0, 0, 0, 0, 0, 0}
@@ -46,6 +50,19 @@ namespace icp
             io.visualization = io_section["visualization"].value_or("");
         }
 
+        // Parse parameters
+        if (tbl.contains("params"))
+        {
+            auto params_section = tbl["params"];
+            trim = params_section["trim"].value_or(false);
+            subsample = params_section["subsample"].value_or(1.0f);
+            mse_threshold = params_section["mse_threshold"].value_or(1e-5f);
+
+            // Check bounding conditions
+            subsample = clamp(subsample, 0.0f, 1.0f);
+            mse_threshold = clamp(mse_threshold, 1e-10f, INFINITY);
+        }
+
         // Parse Rotation section
         if (tbl.contains("params") && tbl["params"].as_table()->contains("rotation"))
         {
@@ -75,7 +92,7 @@ namespace icp
         return 0;
     }
 
-    size_t load_cloud_ply(const string ply_filepath, Point3D* cloud)
+    size_t load_cloud_ply(const string ply_filepath, Point3D* &cloud, const float subsample)
     {
         size_t num_points = 0;
 
@@ -87,11 +104,9 @@ namespace icp
                 throw std::runtime_error("Unable to open file: " + ply_filepath);
             }
 
-            // Load the PLY file
             tinyply::PlyFile ply_file;
             ply_file.parse_header(file_stream);
 
-            // Prepare buffers for x, y, z data
             std::shared_ptr<tinyply::PlyData> vertices;
 
             try
@@ -103,25 +118,34 @@ namespace icp
                 throw std::runtime_error("PLY file missing 'x', 'y', or 'z' vertex properties.");
             }
 
-            // Read the file data
             ply_file.read(file_stream);
 
-            // Check that we have valid data
             if (vertices && vertices->count > 0)
             {
-                num_points = vertices->count;
+                size_t total_points = vertices->count;
+                num_points = static_cast<size_t>(total_points * subsample);
 
-                // Dynamically allocate memory for points
                 cloud = new Point3D[num_points];
-
                 const float *vertex_buffer = reinterpret_cast<const float *>(vertices->buffer.get());
 
-                for (size_t i = 0; i < num_points; ++i)
+                std::random_device rd;
+                std::mt19937 gen(rd());
+                std::uniform_real_distribution<float> dis(0.0, 1.0);
+
+                size_t index = 0;
+                for (size_t i = 0; i < total_points && index < num_points; ++i)
                 {
-                    cloud[i].x = vertex_buffer[3 * i + 0];
-                    cloud[i].y = vertex_buffer[3 * i + 1];
-                    cloud[i].z = vertex_buffer[3 * i + 2];
+                    if (dis(gen) <= subsample)
+                    {
+                        cloud[index].x = vertex_buffer[3 * i + 0];
+                        cloud[index].y = vertex_buffer[3 * i + 1];
+                        cloud[index].z = vertex_buffer[3 * i + 2];
+                        ++index;
+                    }
                 }
+
+                // Adjust num_points if fewer points were randomly selected
+                num_points = index;
             }
             else
             {

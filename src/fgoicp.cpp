@@ -5,10 +5,8 @@ namespace icp
 {
     void PointCloudRegistration::initialize()
     {
-        Point3D* pcs;    // source point cloud
-        Point3D* pct;    // target point cloud
-        size_t ns = load_cloud_ply(config.io.source, pcs);
-        size_t nt = load_cloud_ply(config.io.target, pct);
+        ns = load_cloud_ply(config.io.source, pcs, config.subsample);
+        nt = load_cloud_ply(config.io.target, pct, 1.0);  // Never subsample target cloud
         std::cout << "Source points: " << ns << "\n"
                   << "Target points: " << nt << std::endl;
     } 

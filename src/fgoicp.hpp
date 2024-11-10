@@ -2,6 +2,7 @@
 #define FGOICP_HPP
 
 #include "common.hpp"
+#include <iostream>
 
 namespace icp
 {
@@ -9,7 +10,11 @@ namespace icp
     {
         public:
             PointCloudRegistration(std::string config_path) : config{config_path} {};
-            ~PointCloudRegistration() {};
+            ~PointCloudRegistration()
+            {
+                if (pcs) delete[] pcs;
+                if (pct) delete[] pct;
+            }
 
             void initialize();
             //void run();
@@ -17,6 +22,9 @@ namespace icp
         private:
             icp::Config config;
 
+            size_t ns, nt;   // number of source/target points
+            Point3D* pcs;    // source point cloud
+            Point3D* pct;    // target point cloud
     };
 }
 

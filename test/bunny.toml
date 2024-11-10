@@ -15,7 +15,7 @@ visualization = "viz.ply"                   # visualization ply file, set to "" 
 [params]
 
 trim = true                                 # perform trimming
-subsample = 0.5                             # subsample the target and source sets with the coeff
+subsample = 0.5                             # subsample the source point cloud
 mse_threshold = 1e-5                        # MSE threshold for convergence
 
 # Search over Rotational Space SO(3)

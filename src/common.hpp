@@ -9,6 +9,10 @@ namespace icp
     class Config
     {
         public:
+            bool trim;
+            float subsample;
+            float mse_threshold;
+
             struct IO 
             {
                 std::string target;         // target point cloud ply path
@@ -44,7 +48,7 @@ namespace icp
         float z;
     };
 
-    size_t load_cloud_ply(const string ply_filepath, Point3D* cloud);
+    size_t load_cloud_ply(const string ply_filepath, Point3D* &cloud, const float subsample);
 }
 
 #endif // COMMON_HPP
