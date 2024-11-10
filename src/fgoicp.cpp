@@ -10,6 +10,11 @@ namespace icp
         std::cout << "Source points: " << ns << "\n"
                   << "Target points: " << nt << std::endl;
     } 
+
+    void PointCloudRegistration::run()
+    {
+        branch_and_bound();
+    }
 }
 
 
@@ -23,6 +28,7 @@ int main(int argc, char* argv[])
 
     icp::PointCloudRegistration pcr(argv[1]);
     pcr.initialize();
+    pcr.run();
 
     return 0;
 }

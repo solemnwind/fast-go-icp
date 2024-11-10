@@ -8,23 +8,32 @@ namespace icp
 {
     class PointCloudRegistration
     {
-        public:
-            PointCloudRegistration(std::string config_path) : config{config_path} {};
-            ~PointCloudRegistration()
-            {
-                if (pcs) delete[] pcs;
-                if (pct) delete[] pct;
-            }
+    public:
+        PointCloudRegistration(std::string config_path) : config{config_path} {};
+        ~PointCloudRegistration()
+        {
+            if (pcs) { delete[] pcs; }
+            if (pct) { delete[] pct; }
+        }
 
-            void initialize();
-            //void run();
+        void initialize();
+        void run();
 
-        private:
-            icp::Config config;
+    private:
+        icp::Config config;
 
-            size_t ns, nt;   // number of source/target points
-            Point3D* pcs;    // source point cloud
-            Point3D* pct;    // target point cloud
+        // Data
+        size_t ns, nt; // number of source/target points
+        Point3D *pcs;  // source point cloud
+        Point3D *pct;  // target point cloud
+
+        // Results
+        float best_err;
+        
+
+        void build_kd_tree();
+
+        void branch_and_bound();
     };
 }
 

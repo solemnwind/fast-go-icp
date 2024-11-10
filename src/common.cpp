@@ -9,33 +9,36 @@
 
 namespace icp
 {
-    Config::Config(const string toml_filepath) :
-        trim(false), subsample(1.0f), mse_threshold(1e-5f),
-        io{"", "", "", ""},
-        rotation{0, 0, 0, 0, 0, 0},
-        translation{0, 0, 0, 0, 0, 0}
-    { 
+    Config::Config(const string toml_filepath)
+        : trim(false), subsample(1.0f), mse_threshold(1e-5f),
+          io{"", "", "", ""},
+          rotation{0, 0, 0, 0, 0, 0},
+          translation{0, 0, 0, 0, 0, 0}
+    {
         string base_filename = toml_filepath.substr(toml_filepath.find_last_of("/\\") + 1);
         std::cout << "Reading configurations from " << base_filename << std::endl;
-        int err = parse_toml(toml_filepath);
-        if (err) { throw; }
+        parse_toml(toml_filepath);
     }
 
-    int Config::parse_toml(const string toml_filepath)
+    void Config::parse_toml(const string toml_filepath)
     {
         toml::table tbl;
+
         try
         {
             tbl = toml::parse_file(toml_filepath);
         }
-        catch (const toml::parse_error& err)
+        catch (const toml::parse_error &err)
         {
-            std::cerr
-                << "Error parsing file '" << *err.source().path
-                << "':\n" << err.description()
-                << "\n (" << err.source().begin << ")\n";
-            return 1;
+            std::string err_msg = "Error parsing file '";
+            err_msg += *err.source().path;  // Dereference the pointer to get the path as a string
+            err_msg += "': ";
+            err_msg += err.description();
+            err_msg += "\n";
+
+            throw std::runtime_error(err_msg);
         }
+ 
 
         std::optional<string> desc = tbl["info"]["description"].value<string>();
         std::cout << desc.value() << std::endl;
@@ -87,12 +90,10 @@ namespace icp
             translation.zmax = translation_section["zmax"].value_or(1.0f);
         }
 
-        std::cout << "Config parsed successfully." << std::endl;    
-
-        return 0;
+        std::cout << "Config parsed successfully." << std::endl;
     }
 
-    size_t load_cloud_ply(const string ply_filepath, Point3D* &cloud, const float subsample)
+    size_t load_cloud_ply(const string ply_filepath, Point3D *&cloud, const float subsample)
     {
         size_t num_points = 0;
 
@@ -111,7 +112,7 @@ namespace icp
 
             try
             {
-                vertices = ply_file.request_properties_from_element("vertex", { "x", "y", "z" });
+                vertices = ply_file.request_properties_from_element("vertex", {"x", "y", "z"});
             }
             catch (const std::exception &err)
             {
@@ -154,7 +155,7 @@ namespace icp
         }
         catch (const std::exception &err)
         {
-            std::cerr << "Error reading PLY file: " << err.what() << std::endl;
+            throw std::runtime_error(string("Error reading PLY file: ") + err.what());
         }
 
         return num_points;
