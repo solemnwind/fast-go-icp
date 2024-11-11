@@ -3,7 +3,7 @@
 #include <random>
 #include "toml.hpp"
 #define TINYPLY_IMPLEMENTATION
-#include "tinyply.h"
+//#include "tinyply.h"
 
 #define clamp(x, min, max) (x) < (max) ? ((x) > (min) ? (x) : (min)) : (max)
 
@@ -92,7 +92,7 @@ namespace icp
         return 0;
     }
 
-    size_t load_cloud_ply(const string ply_filepath, Point3D* &cloud, const float subsample)
+    /*size_t load_cloud_ply(const string ply_filepath, Point3D* &cloud, const float subsample)
     {
         size_t num_points = 0;
 
@@ -144,7 +144,7 @@ namespace icp
                     }
                 }
 
-                // Adjust num_points if fewer points were randomly selected
+                 Adjust num_points if fewer points were randomly selected
                 num_points = index;
             }
             else
@@ -158,5 +158,5 @@ namespace icp
         }
 
         return num_points;
-    }
+    }*/
 }

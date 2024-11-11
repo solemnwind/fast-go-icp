@@ -1,13 +1,38 @@
-# Fast Globally Optimal ICP - A CUDA Implementation of [Go-ICP](https://github.com/yangjiaolong/Go-ICP)
+CUDA Fast Globally Optimal ICP
+================
 
-**University of Pennsylvania, CIS 5650: GPU Programming and Architecture, Final Project**
+**University of Pennsylvania, CIS 565: GPU Programming and Architecture, Project 3**
 
-* **Authors**: Mufeng Xu & Zhaojin Sun
-* Tested on: 
+* Zhaojin Sun & Mufeng Xu
+  * www.linkedin.com/in/zjsun
+  * www.linkedin.com/in/mufeng-xu
+* Tested on: Windows 11, i9-13900HX @ 2.2GHz 64GB, RTX 4090 Laptop 16GB
 
-## Demo
+Getting Started
+================
+## Requirements
+## Run the code
 
-## Introduction
+Project Introduction
+================
+## Iterative Closest Point (ICP)
+## Globally Optimal ICP (Go-ICP)
+## GPU Programming and CUDA
 
-## Reference
+Details on Features
+================
+## CUDA Accelerated Vanilla ICP
+### (i) CPU Method
+### (ii) GPU Naive Method
+### (iii) GPU k-d Tree Method
 
+## CUDA Accelerated Go-ICP
+
+
+## Visualization and Application
+
+## Analysis and Discussion
+
+
+Acknowledgements
+================
