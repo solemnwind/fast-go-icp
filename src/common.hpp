@@ -1,8 +1,12 @@
 #ifndef COMMON_HPP
 #define COMMON_HPP
 #include <string>
+#include <vector>
 #include <cuda.h>
 #include <cuda_runtime.h>
+#include <math.h>
+#include <glm/vec3.hpp>
+#include <glm/mat3x3.hpp>
 
 using std::string;
 
@@ -14,11 +18,7 @@ namespace icp
     struct Rotation
     {
         float rr, x, y, z;
-
-        // Precompute coefficients for rotation computation
-        float r11, r12, r13;
-        float r21, r22, r23;
-        float r31, r32, r33;
+        glm::mat3 R;
 
         Rotation(float x, float y, float z) : 
             x(x), y(y), z(z)
@@ -28,12 +28,15 @@ namespace icp
 
             float ww = 1.0f - rr;
             float w = sqrt(ww);
-            float wx = w * x; float xx = x * x;
-            float wy = w * y; float xy = x * y; float yy = y * y;
-            float wz = w * z; float xz = x * z; float yz = y * z; float zz = z * z;
-            r11 = (ww + xx - yy - zz);  r12 = 2 * (xy - wz);        r13 = 2 * (xz + wy); 
-            r21 = 2 * (xy + wz);        r22 = (ww - xx + yy - zz);  r23 = 2 * (yz - wx);
-            r31 = 2 * (xz - wy);        r32 = 2 * (yz + wx);        r33 = (ww - xx - yy + zz);
+            float wx = w * x, xx = x * x;
+            float wy = w * y, xy = x * y, yy = y * y;
+            float wz = w * z, xz = x * z, yz = y * z, zz = z * z;
+
+            R = glm::mat3(
+                ww + xx - yy - zz,  2 * (xy - wz),      2 * (xz + wy),
+                2 * (xy + wz),      ww - xx + yy - zz,  2 * (yz - wx),
+                2 * (xz - wy),      2 * (yz + wx),      ww - xx - yy + zz
+            );
         }
     };
 
@@ -49,13 +52,8 @@ namespace icp
 
         bool is_valid()
         {
-            return q.w >= 0.0f;
+            return q.rr <= 1.0f;
         }
-    };
-
-    struct Vector
-    {
-        float x, y, z;
     };
 
     /**
@@ -64,27 +62,14 @@ namespace icp
      */
     struct TransNode
     {
-        Vector t;
+        glm::vec3 t;
         float span;
         float ub, lb;
     };
 
-    typedef Vector Point3D;
+    typedef glm::vec3 Point3D;
 
-    /**
-     * @brief Rotate and translate a point
-     * 
-     * @param p Point3D p
-     * @param q Rotation q (Rotation)
-     * @param t Vector t (Translation)
-     */
-    Point3D transform_SE3(const Point3D &p, const Rotation &q, const Vector &t)
-    {
-        float a = q.r11 * p.x + q.r12 * p.y + q.r13 * p.z + t.x;
-        float b = q.r21 * p.x + q.r22 * p.y + q.r23 * p.z + t.y;
-        float c = q.r31 * p.x + q.r32 * p.y + q.r33 * p.z + t.z;
-        return Point3D{a, b, c};
-    }
+    using PointCloud = std::vector<Point3D>;
     
     class Config
     {
@@ -121,7 +106,7 @@ namespace icp
         void parse_toml(const string toml_filepath);
     };
 
-    size_t load_cloud_ply(const string ply_filepath, Point3D *&cloud, const float subsample);
+    size_t load_cloud_ply(const string ply_filepath, const float subsample, PointCloud &cloud);
 }
 
 #endif // COMMON_HPP

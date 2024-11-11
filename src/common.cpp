@@ -93,7 +93,7 @@ namespace icp
         std::cout << "Config parsed successfully." << std::endl;
     }
 
-    size_t load_cloud_ply(const string ply_filepath, Point3D *&cloud, const float subsample)
+    size_t load_cloud_ply(const string ply_filepath, const float subsample, PointCloud &cloud)
     {
         size_t num_points = 0;
 
@@ -126,7 +126,7 @@ namespace icp
                 size_t total_points = vertices->count;
                 num_points = static_cast<size_t>(total_points * subsample);
 
-                cloud = new Point3D[num_points];
+                cloud.reserve(num_points);  // Pre-allocate space for PointCloud
                 const float *vertex_buffer = reinterpret_cast<const float *>(vertices->buffer.get());
 
                 std::random_device rd;
