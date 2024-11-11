@@ -29,10 +29,15 @@ namespace icp
 
         // Results
         float best_err;
-        
 
-        void build_kd_tree();
-
+        /**
+         * @brief Perform branch-and-bound algorithm in SE(3) space
+         * 
+         * @details This is a __host__ function, 
+         * it launches cuda kernels for translation BnB.
+         * 
+         * @return none
+         */
         void branch_and_bound();
     };
 }
