@@ -125,8 +125,8 @@ namespace icp
             {
                 size_t total_points = vertices->count;
                 num_points = static_cast<size_t>(total_points * subsample);
-
                 cloud.reserve(num_points);  // Pre-allocate space for PointCloud
+
                 const float *vertex_buffer = reinterpret_cast<const float *>(vertices->buffer.get());
 
                 std::random_device rd;
@@ -138,9 +138,9 @@ namespace icp
                 {
                     if (dis(gen) <= subsample)
                     {
-                        cloud[index].x = vertex_buffer[3 * i + 0];
-                        cloud[index].y = vertex_buffer[3 * i + 1];
-                        cloud[index].z = vertex_buffer[3 * i + 2];
+                        cloud.emplace_back(vertex_buffer[3 * i + 0],
+                                           vertex_buffer[3 * i + 1],
+                                           vertex_buffer[3 * i + 2]);
                         ++index;
                     }
                 }

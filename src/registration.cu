@@ -10,7 +10,7 @@ namespace icp
     {
         size_t idx_s;
         size_t idx_t;
-        float dist;
+        float dist_squared;
         Point3D ps_transformed;
     };
 
@@ -19,14 +19,19 @@ namespace icp
         int index = (blockIdx.x * blockDim.x) + threadIdx.x;
         if (index >= N) { return; }
 
-        Point3D entry = R * dev_pcs[index] + t;
+        Point3D query_point = R * dev_pcs[index] + t;
+        const float query[] {query_point.x, query_point.y, query_point.z};
 
-        // KDTree::Result ret = dev_kdt->query(entry);
+		size_t nearest_index;
+		float distance_squared;
+		// nanoflann::KNNResultSet<float> result(1);
+		// result.init(&nearest_index, &distance_squared);
+        // dev_kdt->findNeighbors(result, query, nanoflann::SearchParameters(1));
 
-        // dev_corrs[index].dist = ret.error;
-        dev_corrs[index].idx_s = index;
+        // dev_corrs[index].dist_squared = result;
+        // dev_corrs[index].idx_s = index;
         // dev_corrs[index].idx_t = ret.idx_target;
-        dev_corrs[index].ps_transformed = entry;
+        // dev_corrs[index].ps_transformed = query_point;
     }
 
     __global__ void kernSetRegistrationMatrices(int N, Rotation q, glm::vec3 t, const Point3D* dev_pcs, const Point3D* dev_pct, const Correspondence* dev_corrs, float* dev_mat_pcs, float* dev_mat_pct)

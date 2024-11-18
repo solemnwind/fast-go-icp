@@ -3,14 +3,6 @@
 
 namespace icp
 {
-    void PointCloudRegistration::initialize()
-    {
-        ns = load_cloud_ply(config.io.source, config.subsample, pcs);
-        nt = load_cloud_ply(config.io.target, 1.0, pct);  // Never subsample target cloud
-        std::cout << "Source points: " << ns << "\n"
-                  << "Target points: " << nt << std::endl;
-    } 
-
     void PointCloudRegistration::run()
     {
         branch_and_bound();
@@ -27,8 +19,7 @@ int main(int argc, char* argv[])
     }
 
     icp::PointCloudRegistration pcr(argv[1]);
-    pcr.initialize();
-    // pcr.run();
+    pcr.run();
 
     return 0;
 }

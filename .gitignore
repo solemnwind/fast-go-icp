@@ -36,3 +36,4 @@ build
 
 # IDE Configurations
 .vscode
+/.vs

@@ -15,13 +15,20 @@
 #include "common.hpp"
 #include <vector>
 #include <iostream>
+#include <cuda.h>
+#include <cuda_runtime.h>
 
 namespace icp
 {
-    // Tree struct definition for nanoflann usage
-    struct Tree 
+    /**
+     * @brief DataSource definition for `nanoflann` adaptor
+     * 
+     */
+    struct _DataSource 
     {
-        PointCloud points;
+        const PointCloud &points;
+
+        _DataSource(const PointCloud &points) : points(points) {}
 
         // Required methods for nanoflann
         inline size_t kdtree_get_point_count() const 
@@ -54,36 +61,42 @@ namespace icp
         }
     };
 
-    // Define the KDTree type
+    /**
+     * @brief `nanoflann` K-D Tree Adaptor for 3D `float` with L2-norm metric
+     * 
+     */
     typedef nanoflann::KDTreeSingleIndexAdaptor<
-        nanoflann::L2_Simple_Adaptor<float, Tree>,
-        Tree,
+        nanoflann::L2_Simple_Adaptor<float, _DataSource>,
+        _DataSource,
         3 /* Data dimensionality */
     > KDTree;
 
-    // Function to build the KDTree and run an example query
-    void buildKDTree(Tree& tree) 
+    /**
+     * @brief ArrayNode for flattened K-D Tree
+     * 
+     */
+    struct ArrayNode 
     {
-        // Ensure this function only runs on the host side
-        std::unique_ptr<KDTree> kdtree = std::make_unique<KDTree>(
-            3 /* Data dimensionality */, tree, nanoflann::KDTreeSingleIndexAdaptorParams(10 /* max leaf */)
-        );
-        kdtree->buildIndex();
+        bool is_leaf;
 
-        std::cout << "KDTree built with " << tree.kdtree_get_point_count() << " points." << std::endl;
+        union {
+            // Leaf node data
+            struct {
+                size_t left, right;  // Indices of points in the leaf node
+            } leaf;
 
-        // Example: nearest neighbor search
-        float query_pt[3] = { 1.0, 1.0, 1.0 }; // Example query point
-        size_t num_results = 1;
-        std::vector<size_t> ret_index(num_results);
-        std::vector<float> out_dist_sqr(num_results);
+            // Non-leaf node data
+            struct {
+                int divfeat;           // Dimension used for subdivision
+                float divlow, divhigh; // Range values used for subdivision
+                size_t child1, child2; // Indices of child nodes in the array
+            } nonleaf;
+        } data;
+    };
 
-        nanoflann::KNNResultSet<float> resultSet(num_results);
-        resultSet.init(&ret_index[0], &out_dist_sqr[0]);
-        kdtree->findNeighbors(resultSet, &query_pt[0], nanoflann::SearchParameters(10));
+    void flatten_kd_tree(KDTree kdt, float* arr_kdt);
 
-        std::cout << "Nearest neighbor index: " << ret_index[0] << ", squared distance: " << out_dist_sqr[0] << std::endl;
-    }
+    __device__ void find_nearest_neighbor(float* arr_kdt);
 }
 
 #endif // KDTREE_ADAPTOR_HPP

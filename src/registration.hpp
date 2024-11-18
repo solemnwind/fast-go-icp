@@ -11,17 +11,14 @@ namespace icp
     {
     public:
         Registration(const PointCloud &pct, size_t nt, const PointCloud &pcs, size_t ns) : 
-            kdt_target{3, tree, nanoflann::KDTreeSingleIndexAdaptorParams(10)},
             pct(pct), pcs(pcs),
-            nt(nt), ns(ns)
+            nt(nt), ns(ns),
+            kdt_target{3, _DataSource(pct), nanoflann::KDTreeSingleIndexAdaptorParams(10)}
         {
-            // Load points into tree.points
-            // Example: tree.points.push_back(glm::vec3(x, y, z));
-            tree.points = pct;
             // Create and build the KDTree
             kdt_target.buildIndex();
 
-            std::cout << "KD-tree built with " << tree.kdtree_get_point_count() << " points." << std::endl;
+            std::cout << "KD-tree built with " << pct.size() << " points." << std::endl;
         }
 
         ~Registration()
@@ -37,12 +34,23 @@ namespace icp
         __host__ __device__ float run(Rotation &q, glm::vec3 &t);
 
     private:
-        Tree tree;
-        KDTree kdt_target;
+        /**
+         * @brief Target point cloud
+         */
         const PointCloud &pct;
+        /**
+         * @brief Source point cloud
+         */
         const PointCloud &pcs;
+        /**
+         * @brief Number of target cloud points
+         */
         const size_t nt;
+        /**
+         * @brief Number of source cloud points
+         */
         const size_t ns;
+        KDTree kdt_target;
 
         size_t max_iter = 10;
 
