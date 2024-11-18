@@ -3,6 +3,7 @@
 #include <cuda_runtime.h>
 #include <device_launch_parameters.h>
 #include <thrust/device_vector.h>
+#include <iostream>
 
 namespace icp
 {
@@ -19,11 +20,11 @@ namespace icp
         int index = (blockIdx.x * blockDim.x) + threadIdx.x;
         if (index >= N) { return; }
 
-        Point3D query_point = R * dev_pcs[index] + t;
-        const float query[] {query_point.x, query_point.y, query_point.z};
+        // Point3D query_point = R * dev_pcs[index] + t;
+        // const float query[] {query_point.x, query_point.y, query_point.z};
 
-		size_t nearest_index;
-		float distance_squared;
+		// size_t nearest_index;
+		// float distance_squared;
 		// nanoflann::KNNResultSet<float> result(1);
 		// result.init(&nearest_index, &distance_squared);
         // dev_kdt->findNeighbors(result, query, nanoflann::SearchParameters(1));
@@ -54,26 +55,51 @@ namespace icp
         dev_mat_pcs[mat_idx + 2] = ps.z;
     }
     
-    __host__ __device__ float Registration::run(Rotation &q, glm::vec3 &t) 
+    __host__ float Registration::run(Rotation &q, glm::vec3 &t) 
     {
-        size_t num_crpnds = ns;
+        // size_t num_crpnds = ns;
 
-        Correspondence* corr = new Correspondence[num_crpnds];
+        // Correspondence* corr = new Correspondence[num_crpnds];
 
-        float* mat_pct = new float[num_crpnds * 3];
-        float* mat_pcs = new float[num_crpnds * 3];
+        // float* mat_pct = new float[num_crpnds * 3];
+        // float* mat_pcs = new float[num_crpnds * 3];
 
-        glm::vec3 target_centroid {0.0f, 0.0f, 0.0f};
-        glm::vec3 source_centroid {0.0f, 0.0f, 0.0f};
+        // glm::vec3 target_centroid {0.0f, 0.0f, 0.0f};
+        // glm::vec3 source_centroid {0.0f, 0.0f, 0.0f};
 
-        float error = 0;
+        // float error = 0;
 
-        for (size_t iter = 0; iter < max_iter; ++iter)
-        {
+        // for (size_t iter = 0; iter < max_iter; ++iter)
+        // {
             
-        }
+        // }
 
-        delete[] corr;
+        // Test kd-tree
+        glm::vec3 queryPoint = this->pcs[1152];
+        std::cout << queryPoint.x << ", " << queryPoint.y << ", " << queryPoint.z << "\n";
+		float query[3] = { queryPoint.x, queryPoint.y, queryPoint.z };
+
+		size_t nearestIndex;
+		float outDistSqr;
+		nanoflann::KNNResultSet<float> resultSet(1);
+		resultSet.init(&nearestIndex, &outDistSqr);
+
+		this->kdt_target.findNeighbors(resultSet, query, nanoflann::SearchParameters(10));
+        std::cout << nearestIndex << ", " << outDistSqr << "\n";
+
+        // Test flattened kd-tree
+        // auto flattened_kdt = convert_KDTree_to_array(this->kdt_target);
+        // std::vector<ArrayNode> array;
+        // size_t currentIndex = 0;
+        // flatten_KDTree(kdt_target.root_node_, array, currentIndex);
+        FlattenedKDTree fkdt {kdt_target, pct};
+        float bestDist = INF;
+        size_t bestIndex;
+        fkdt.find_nearest_neighbor(queryPoint, 0, bestDist, bestIndex, 0);
+        std::cout << "size of flattened kd tree: " << fkdt.array.size() << "\n";
+        std::cout << "best idx: " << bestIndex << " best dist: " << bestDist << "\n";
+
+        // delete[] corr;
         return 0.0f;
     }
 }

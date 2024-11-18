@@ -107,6 +107,8 @@ namespace icp
     };
 
     size_t load_cloud_ply(const string ply_filepath, const float subsample, PointCloud &cloud);
+    
+    size_t load_cloud_txt(const string txt_filepath, const float subsample, PointCloud &cloud);
 }
 
 #endif // COMMON_HPP

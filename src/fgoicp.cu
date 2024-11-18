@@ -15,8 +15,14 @@ namespace icp
         RotNode rnode_init {{0.0f, 0.0f, 0.0f}, 
                             1.0f, 
                             INF, 0.0f};
+        TransNode tnode_init {{0.0f, 0.0f, 0.0f},
+                              1.0f,
+                              INF, 0.0f};
         
-         
+        // Test registration functions
+        reg.run(rnode_init.q, tnode_init.t);
+
+
             // Invoke inner BnB
         
         // Prune        

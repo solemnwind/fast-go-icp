@@ -24,16 +24,17 @@ namespace icp
      * @brief DataSource definition for `nanoflann` adaptor
      * 
      */
-    struct _DataSource 
+    struct PointCloudAdaptor 
     {
-        const PointCloud &points;
+        const icp::PointCloud &points;
+        const size_t size;
 
-        _DataSource(const PointCloud &points) : points(points) {}
+        PointCloudAdaptor(const icp::PointCloud &points) : points(points), size(points.size()) {}
 
         // Required methods for nanoflann
         inline size_t kdtree_get_point_count() const 
         {
-            return points.size();
+            return size;
         }
 
         inline float kdtree_get_pt(const size_t idx, const size_t dim) const 
@@ -47,7 +48,7 @@ namespace icp
         template <class T>
         float kdtree_distance(const T* p1, const size_t idx_p2, size_t /*size*/) const 
         {
-            const Point3D& p2 = points[idx_p2];
+            const icp::Point3D& p2 = points[idx_p2];
             float d0 = p1[0] - p2.x;
             float d1 = p1[1] - p2.y;
             float d2 = p1[2] - p2.z;
@@ -65,38 +66,48 @@ namespace icp
      * @brief `nanoflann` K-D Tree Adaptor for 3D `float` with L2-norm metric
      * 
      */
-    typedef nanoflann::KDTreeSingleIndexAdaptor<
-        nanoflann::L2_Simple_Adaptor<float, _DataSource>,
-        _DataSource,
+    using KDTree = nanoflann::KDTreeSingleIndexAdaptor<
+        nanoflann::L2_Simple_Adaptor<float, PointCloudAdaptor>,
+        PointCloudAdaptor,
         3 /* Data dimensionality */
-    > KDTree;
+    >;
 
-    /**
-     * @brief ArrayNode for flattened K-D Tree
-     * 
-     */
-    struct ArrayNode 
+
+    class FlattenedKDTree
     {
-        bool is_leaf;
+    public:
+        struct ArrayNode 
+        {
+            bool is_leaf;
 
-        union {
-            // Leaf node data
-            struct {
-                size_t left, right;  // Indices of points in the leaf node
-            } leaf;
+            union {
+                // Leaf node data
+                struct {
+                    size_t left, right;  // Indices of points in the leaf node
+                } leaf;
 
-            // Non-leaf node data
-            struct {
-                int divfeat;           // Dimension used for subdivision
-                float divlow, divhigh; // Range values used for subdivision
-                size_t child1, child2; // Indices of child nodes in the array
-            } nonleaf;
-        } data;
+                // Non-leaf node data
+                struct {
+                    int32_t divfeat;           // Dimension used for subdivision
+                    float divlow, divhigh; // Range values used for subdivision
+                    size_t child1, child2; // Indices of child nodes in the array
+                } nonleaf;
+            } data;
+        };
+        
+        std::vector<ArrayNode> array;
+        std::vector<uint32_t> vAcc_;
+        const PointCloud &pct;
+
+        FlattenedKDTree(const KDTree &kdt, const PointCloud &pct) : pct(pct) { convert_KDTree_to_array(kdt); vAcc_ = kdt.vAcc_; };
+
+        void find_nearest_neighbor(const Point3D &target, size_t index, float& bestDist, size_t& bestIndex, int depth);
+
+    private:
+        void flatten_KDTree(const KDTree::Node* root, std::vector<ArrayNode>& array, size_t& currentIndex);
+        void convert_KDTree_to_array(const KDTree &kdt);
+        
     };
-
-    void flatten_kd_tree(KDTree kdt, float* arr_kdt);
-
-    __device__ void find_nearest_neighbor(float* arr_kdt);
 }
 
 #endif // KDTREE_ADAPTOR_HPP

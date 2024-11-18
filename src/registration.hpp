@@ -13,7 +13,8 @@ namespace icp
         Registration(const PointCloud &pct, size_t nt, const PointCloud &pcs, size_t ns) : 
             pct(pct), pcs(pcs),
             nt(nt), ns(ns),
-            kdt_target{3, _DataSource(pct), nanoflann::KDTreeSingleIndexAdaptorParams(10)}
+            pct_adaptor(pct),
+            kdt_target{3, pct_adaptor, nanoflann::KDTreeSingleIndexAdaptorParams(10)}
         {
             // Create and build the KDTree
             kdt_target.buildIndex();
@@ -31,7 +32,7 @@ namespace icp
          * 
          * @return float: MSE error
          */
-        __host__ __device__ float run(Rotation &q, glm::vec3 &t);
+        __host__ float run(Rotation &q, glm::vec3 &t);
 
     private:
         /**
@@ -50,6 +51,8 @@ namespace icp
          * @brief Number of source cloud points
          */
         const size_t ns;
+
+        PointCloudAdaptor pct_adaptor;
         KDTree kdt_target;
 
         size_t max_iter = 10;
