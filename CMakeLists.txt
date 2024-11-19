@@ -1,9 +1,9 @@
 # Minimum required CMake version
-cmake_minimum_required(VERSION 3.10)
+cmake_minimum_required(VERSION 3.18)
 
-set(CMAKE_CUDA_ARCHITECTURES 89)
+#set(CMAKE_CUDA_ARCHITECTURES 89)
 # Specify the path to the CUDA compiler
-set(CMAKE_CUDA_COMPILER /usr/local/cuda/bin/nvcc)
+#set(CMAKE_CUDA_COMPILER /usr/local/cuda/bin/nvcc)
 
 # Project name and language
 project(fast-go-icp LANGUAGES CUDA CXX)
@@ -15,6 +15,8 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # Set CUDA standard
 set(CMAKE_CUDA_STANDARD 17)
 set(CMAKE_CUDA_STANDARD_REQUIRED ON)
+
+#set(CUDA_NVCC_FLAGS_DEBUG "-G -g")
 
 # Find the CUDAToolkit package
 find_package(CUDAToolkit REQUIRED)
@@ -32,7 +34,7 @@ file(GLOB_RECURSE CU_SOURCES "${SRC_DIR}/*.cu")
 file(GLOB_RECURSE HEADERS "${SRC_DIR}/*.hpp")
 
 # Add the executable target with both .cpp and .cu files
-add_executable(fgoicp ${CPP_SOURCES} ${CU_SOURCES})
+add_executable(fgoicp ${CPP_SOURCES} ${CU_SOURCES} ${HEADERS})
 
 # Specify include directories
 target_include_directories(fgoicp
@@ -47,5 +49,5 @@ set_target_properties(fgoicp PROPERTIES
 
 # Link CUDA runtime library
 target_link_libraries(fgoicp
-    PRIVATE CUDA::cudart
+    PRIVATE cuda CUDA::cudart
 )

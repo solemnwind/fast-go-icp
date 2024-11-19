@@ -7,6 +7,11 @@
 
 namespace icp
 {
+    void PointCloudRegistration::run()
+    {
+        branch_and_bound();
+    }
+
     __host__ void PointCloudRegistration::branch_and_bound()
     {
         // Outer BnB
@@ -27,5 +32,5 @@ namespace icp
         
         // Prune        
     }
-    
+
 }

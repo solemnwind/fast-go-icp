@@ -1,4 +1,5 @@
 #include "kdtree_adaptor.hpp"
+#include <cmath>
 
 namespace icp
 {
@@ -38,51 +39,6 @@ namespace icp
         flatten_KDTree(kdt.root_node_, array, currentIndex);
     }
 
-    #include <cmath>
-
-    float distanceSquared(const Point3D &point1, const Point3D &point2) {
-        float dist = 0;
-        for (size_t i = 0; i < 3; i++) {
-            float diff = point1[i] - point2[i];
-            dist += diff * diff;
-        }
-        return dist;
-    }
-
-    void FlattenedKDTree::find_nearest_neighbor(const Point3D &target, size_t index, 
-                    float& bestDist, size_t& bestIndex, int depth = 0) {
-        if (index >= array.size()) return;
-
-        const ArrayNode& node = array[index];
-        if (node.is_leaf) {
-            // Leaf node: Check all points in the leaf node
-            size_t left = node.data.leaf.left;
-            size_t right = node.data.leaf.right;
-            for (size_t i = left; i <= right; i++) {
-                float dist = distanceSquared(target, pct[vAcc_[i]]);
-                if (dist < bestDist) {
-                    bestDist = dist;
-                    bestIndex = vAcc_[i];
-                }
-            }
-        } else {
-            // Non-leaf node: Determine which child to search
-            int axis = node.data.nonleaf.divfeat;
-            float diff = target[axis] - node.data.nonleaf.divlow;
-
-            // Choose the near and far child based on comparison
-            size_t nearChild = diff < 0 ? node.data.nonleaf.child1 : node.data.nonleaf.child2;
-            size_t farChild = diff < 0 ? node.data.nonleaf.child2 : node.data.nonleaf.child1;
-
-            // Search near child
-            find_nearest_neighbor(target, nearChild, bestDist, bestIndex, depth + 1);
-
-            // Search far child if needed
-            if (diff * diff < bestDist) {
-                find_nearest_neighbor(target, farChild, bestDist, bestIndex, depth + 1);
-            }
-        }
-    }
 
 
 }
