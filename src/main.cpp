@@ -1,4 +1,4 @@
-#include "fgoicp.hpp"
+#include "fgoicp/fgoicp.hpp"
 #include <cuda.h>
 
 

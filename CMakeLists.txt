@@ -1,53 +1,48 @@
-# Minimum required CMake version
 cmake_minimum_required(VERSION 3.18)
-
-#set(CMAKE_CUDA_ARCHITECTURES 89)
-# Specify the path to the CUDA compiler
-#set(CMAKE_CUDA_COMPILER /usr/local/cuda/bin/nvcc)
-
-# Project name and language
 project(fast-go-icp LANGUAGES CUDA CXX)
 
-# Set C++ standard
+set_property(GLOBAL PROPERTY USE_FOLDERS ON)
+
+set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
+
+# Enable C++17 for host code
 set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
+if(NOT DEFINED CMAKE_CUDA_STANDARD)
+    set(CMAKE_CUDA_STANDARD 17)
+    set(CMAKE_CUDA_STANDARD_REQUIRED ON)
+endif()
 
-# Set CUDA standard
-set(CMAKE_CUDA_STANDARD 17)
-set(CMAKE_CUDA_STANDARD_REQUIRED ON)
+# Set a default build type if none was specified
+if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+    SET(CMAKE_BUILD_TYPE Release CACHE STRING "Choose the type of build." FORCE)
+    # Set the possible values of build type for cmake-gui
+    SET_PROPERTY(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS "Debug" "Release" "MinSizeRel" "RelWithDebInfo")
+endif()
 
-#set(CUDA_NVCC_FLAGS_DEBUG "-G -g")
+if(UNIX)
+    include_directories("${CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES}")
+endif(UNIX)
 
-# Find the CUDAToolkit package
-find_package(CUDAToolkit REQUIRED)
+add_subdirectory(fgoicp)
 
-# Set the source and include directories
-set(SRC_DIR "${CMAKE_SOURCE_DIR}/src")
-set(EXTERNAL_DIR "${CMAKE_SOURCE_DIR}/external/include")
+include_directories(. ${CMAKE_CURRENT_SOURCE_DIR}/external/include)
 
-# Add the external directory to the include path
-include_directories(${EXTERNAL_DIR})
+# set(headers
+#     "src/testing_helpers.hpp"
+#     )
 
-# Find all .cpp and .cu source files
-file(GLOB_RECURSE CPP_SOURCES "${SRC_DIR}/*.cpp")
-file(GLOB_RECURSE CU_SOURCES "${SRC_DIR}/*.cu")
-file(GLOB_RECURSE HEADERS "${SRC_DIR}/*.hpp")
+set(sources
+    "src/main.cpp"
+    )
 
-# Add the executable target with both .cpp and .cu files
-add_executable(fgoicp ${CPP_SOURCES} ${CU_SOURCES} ${HEADERS})
+# list(SORT headers)
+list(SORT sources)
 
-# Specify include directories
-target_include_directories(fgoicp
-    PRIVATE ${SRC_DIR}
-    PRIVATE ${EXTERNAL_DIR}
-)
+# source_group(Headers FILES ${headers})
+source_group(Sources FILES ${sources})
 
-# Set CUDA architecture
-set_target_properties(fgoicp PROPERTIES
-    CUDA_ARCHITECTURES 89
-)
-
-# Link CUDA runtime library
-target_link_libraries(fgoicp
-    PRIVATE cuda CUDA::cudart
-)
+add_executable(${CMAKE_PROJECT_NAME} ${sources})
+target_link_libraries(${CMAKE_PROJECT_NAME} fgoicp)
+set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT ${CMAKE_PROJECT_NAME})

@@ -38,7 +38,4 @@ namespace icp
         size_t currentIndex = 0;
         flatten_KDTree(kdt.root_node_, array, currentIndex);
     }
-
-
-
 }

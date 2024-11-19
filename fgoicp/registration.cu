@@ -56,45 +56,50 @@ namespace icp
     }
 
     __device__ float distanceSquared(const Point3D p1, const Point3D p2) {
-      float dx = p1.x - p2.x;
-      float dy = p1.y - p2.y;
-      float dz = p1.z - p2.z;
-      return dx * dx + dy * dy + dz * dz;
+        float dx = p1.x - p2.x;
+        float dy = p1.y - p2.y;
+        float dz = p1.z - p2.z;
+        return dx * dx + dy * dy + dz * dz;
     }
 
     __device__ void find_nearest_neighbor(const Point3D target, size_t index, float* bestDist, size_t* bestIndex, int depth, ArrayNode* array, size_t size_array, uint32_t* vAcc_, Point3D* pct) {
-      if (index >= size_array) return;
+        if (index >= size_array) return;
 
-      const ArrayNode& node = array[index];
-      if (node.is_leaf) {
-        // Leaf node: Check all points in the leaf node
-        size_t left = node.data.leaf.left;
-        size_t right = node.data.leaf.right;
-        for (size_t i = left; i <= right; i++) {
-          float dist = distanceSquared(target, pct[vAcc_[i]]);
-          if (dist < *bestDist) {
-            *bestDist = dist;
-            *bestIndex = vAcc_[i];
-          }
+        const ArrayNode& node = array[index];
+        if (node.is_leaf) 
+        {
+            // Leaf node: Check all points in the leaf node
+            size_t left = node.data.leaf.left;
+            size_t right = node.data.leaf.right;
+            for (size_t i = left; i <= right; i++) 
+            {
+                float dist = distanceSquared(target, pct[vAcc_[i]]);
+                if (dist < *bestDist) 
+                {
+                    *bestDist = dist;
+                    *bestIndex = vAcc_[i];
+                }
+            }
         }
-      }
-      else {
-        // Non-leaf node: Determine which child to search
-        int axis = node.data.nonleaf.divfeat;
-        float diff = target[axis] - node.data.nonleaf.divlow;
+        else 
+        {
+            // Non-leaf node: Determine which child to search
+            int axis = node.data.nonleaf.divfeat;
+            float diff = target[axis] - node.data.nonleaf.divlow;
 
-        // Choose the near and far child based on comparison
-        size_t nearChild = diff < 0 ? node.data.nonleaf.child1 : node.data.nonleaf.child2;
-        size_t farChild = diff < 0 ? node.data.nonleaf.child2 : node.data.nonleaf.child1;
+            // Choose the near and far child based on comparison
+            size_t nearChild = diff < 0 ? node.data.nonleaf.child1 : node.data.nonleaf.child2;
+            size_t farChild = diff < 0 ? node.data.nonleaf.child2 : node.data.nonleaf.child1;
 
-        // Search near child
-        find_nearest_neighbor(target, nearChild, bestDist, bestIndex, depth + 1, array, size_array, vAcc_, pct);
+            // Search near child
+            find_nearest_neighbor(target, nearChild, bestDist, bestIndex, depth + 1, array, size_array, vAcc_, pct);
 
-        // Search far child if needed
-        if (diff * diff < *bestDist) {
-          find_nearest_neighbor(target, farChild, bestDist, bestIndex, depth + 1, array, size_array, vAcc_, pct);
+            // Search far child if needed
+            if (diff * diff < *bestDist) 
+            {
+                find_nearest_neighbor(target, farChild, bestDist, bestIndex, depth + 1, array, size_array, vAcc_, pct);
+            }
         }
-      }
     }
 
     __global__ void kernTestKDTreeLookUp(int N, Point3D query, float* min_dists, size_t* min_indices, ArrayNode* array, size_t size_array, uint32_t* vAcc_, Point3D* pct)
