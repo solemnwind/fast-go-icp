@@ -11,7 +11,6 @@ set(headers
 set(sources
     "common.cpp"
     "fgoicp.cu"
-    "kdtree_adaptor.cu"
     "registration.cu"
     )
 

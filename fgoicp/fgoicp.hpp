@@ -35,7 +35,7 @@ namespace icp
         Registration reg;
 
         // Results
-        float best_err;
+        //float best_err;
 
         /**
          * @brief Perform branch-and-bound algorithm in SE(3) space

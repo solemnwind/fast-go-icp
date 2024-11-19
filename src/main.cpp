@@ -14,10 +14,12 @@ int main(int argc, char* argv[])
     size_t new_stack_size = 16384;
     cudaError_t err = cudaThreadSetLimit(cudaLimitStackSize, new_stack_size);
 
-    if (err != cudaSuccess) {
+    if (err != cudaSuccess) 
+    {
         printf("Error setting stack size: %s\n", cudaGetErrorString(err));
     }
-    else {
+    else 
+    {
         printf("Stack size successfully set to %zu bytes.\n", new_stack_size);
     }
 

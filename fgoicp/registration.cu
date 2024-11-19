@@ -55,116 +55,39 @@ namespace icp
         dev_mat_pcs[mat_idx + 2] = ps.z;
     }
 
-    __device__ float distanceSquared(const Point3D p1, const Point3D p2) {
-        float dx = p1.x - p2.x;
-        float dy = p1.y - p2.y;
-        float dz = p1.z - p2.z;
-        return dx * dx + dy * dy + dz * dz;
-    }
-
-    __device__ void find_nearest_neighbor(const Point3D target, size_t index, float* bestDist, size_t* bestIndex, int depth, ArrayNode* array, size_t size_array, uint32_t* vAcc_, Point3D* pct) {
-        if (index >= size_array) return;
-
-        const ArrayNode& node = array[index];
-        if (node.is_leaf) 
-        {
-            // Leaf node: Check all points in the leaf node
-            size_t left = node.data.leaf.left;
-            size_t right = node.data.leaf.right;
-            for (size_t i = left; i <= right; i++) 
-            {
-                float dist = distanceSquared(target, pct[vAcc_[i]]);
-                if (dist < *bestDist) 
-                {
-                    *bestDist = dist;
-                    *bestIndex = vAcc_[i];
-                }
-            }
-        }
-        else 
-        {
-            // Non-leaf node: Determine which child to search
-            int axis = node.data.nonleaf.divfeat;
-            float diff = target[axis] - node.data.nonleaf.divlow;
-
-            // Choose the near and far child based on comparison
-            size_t nearChild = diff < 0 ? node.data.nonleaf.child1 : node.data.nonleaf.child2;
-            size_t farChild = diff < 0 ? node.data.nonleaf.child2 : node.data.nonleaf.child1;
-
-            // Search near child
-            find_nearest_neighbor(target, nearChild, bestDist, bestIndex, depth + 1, array, size_array, vAcc_, pct);
-
-            // Search far child if needed
-            if (diff * diff < *bestDist) 
-            {
-                find_nearest_neighbor(target, farChild, bestDist, bestIndex, depth + 1, array, size_array, vAcc_, pct);
-            }
-        }
-    }
-
-    __global__ void kernTestKDTreeLookUp(int N, Point3D query, float* min_dists, size_t* min_indices, ArrayNode* array, size_t size_array, uint32_t* vAcc_, Point3D* pct)
+#if TEST_KDTREE
+    __global__ void kernTestKDTreeLookUp(int N, Point3D query, FlattenedKDTree* fkdt, float* min_dists, size_t* min_indices)
     {
         int index = (blockIdx.x * blockDim.x) + threadIdx.x;
         if (index >= N) { return; }
 
-        find_nearest_neighbor(query, 0, min_dists, min_indices, 0, array, size_array, vAcc_, pct);
+        fkdt->find_nearest_neighbor(query, *min_dists, *min_indices);
     }
+#endif
     
     __host__ float Registration::run(Rotation &q, glm::vec3 &t) 
     {
-        // size_t num_crpnds = ns;
+        size_t num_crpnds = ns;
 
-        // Correspondence* corr = new Correspondence[num_crpnds];
+        Correspondence* corr = new Correspondence[num_crpnds];
 
-        // float* mat_pct = new float[num_crpnds * 3];
-        // float* mat_pcs = new float[num_crpnds * 3];
+        float* mat_pct = new float[num_crpnds * 3];
+        float* mat_pcs = new float[num_crpnds * 3];
 
-        // glm::vec3 target_centroid {0.0f, 0.0f, 0.0f};
-        // glm::vec3 source_centroid {0.0f, 0.0f, 0.0f};
+        glm::vec3 target_centroid {0.0f, 0.0f, 0.0f};
+        glm::vec3 source_centroid {0.0f, 0.0f, 0.0f};
 
-        // float error = 0;
+        float error = 0;
 
-        // for (size_t iter = 0; iter < max_iter; ++iter)
-        // {
-            
-        // }
+        for (size_t iter = 0; iter < max_iter; ++iter)
+        {
+         
+        }
 
-        // Test kd-tree
+#if TEST_KDTREE
         glm::vec3 queryPoint = this->pcs[1152];
-        std::cout << queryPoint.x << ", " << queryPoint.y << ", " << queryPoint.z << "\n";
-        float query[3] = { queryPoint.x, queryPoint.y, queryPoint.z };
-
-        size_t nearestIndex;
-        float outDistSqr;
-        nanoflann::KNNResultSet<float> resultSet(1);
-        resultSet.init(&nearestIndex, &outDistSqr);
-
-        this->kdt_target.findNeighbors(resultSet, query, nanoflann::SearchParameters(10));
-        std::cout << nearestIndex << ", " << outDistSqr << "\n";
-
-        // Test flattened kd-tree
-        // auto flattened_kdt = convert_KDTree_to_array(this->kdt_target);
-        // std::vector<ArrayNode> array;
-        // size_t currentIndex = 0;
-        // flatten_KDTree(kdt_target.root_node_, array, currentIndex);
-
-        FlattenedKDTree fkdt {kdt_target, pct};
-
-        ArrayNode* dev_array;
-        uint32_t* dev_vAcc_;
-        Point3D* dev_pct;
-
-        cudaMalloc((void**)&dev_array, sizeof(ArrayNode) * fkdt.array.size());
-        cudaMalloc((void**)&dev_vAcc_, sizeof(uint32_t) * fkdt.vAcc_.size());
-        cudaMalloc((void**)&dev_pct, sizeof(Point3D) * pct.size());
-
-        cudaMemcpy(dev_array, fkdt.array.data(), sizeof(ArrayNode) * fkdt.array.size(), cudaMemcpyHostToDevice);
-        cudaMemcpy(dev_vAcc_, fkdt.vAcc_.data(), sizeof(uint32_t) * fkdt.vAcc_.size(), cudaMemcpyHostToDevice);
-        cudaMemcpy(dev_pct, pct.data(), sizeof(Point3D) * pct.size(), cudaMemcpyHostToDevice);
-
         float bestDist = INF;
         size_t bestIndex;
-        // fkdt.find_nearest_neighbor(queryPoint, bestDist, bestIndex);
 
         float* dev_best_dist;
         size_t* dev_best_idx;
@@ -173,28 +96,121 @@ namespace icp
 
         cudaMemcpy(dev_best_dist, &bestDist, sizeof(float), cudaMemcpyHostToDevice);
 
-        kernTestKDTreeLookUp <<<1, 1>>> (1, queryPoint, dev_best_dist, dev_best_idx, dev_array, fkdt.array.size(), dev_vAcc_, dev_pct);
-        cudaDeviceSynchronize();
-        cudaError_t err = cudaGetLastError();
-        if (cudaSuccess != err)
-        {
-            fprintf(stderr, "CUDA error");
-            fprintf(stderr, ": %s\n", cudaGetErrorString(err));
-        }
+        kernTestKDTreeLookUp <<<1, 1>>> (1, queryPoint, dev_fkdt, dev_best_dist, dev_best_idx);
 
         cudaMemcpy(&bestDist, dev_best_dist, sizeof(float), cudaMemcpyDeviceToHost);
         cudaMemcpy(&bestIndex, dev_best_idx, sizeof(size_t), cudaMemcpyDeviceToHost);
 
-        std::cout << "best idx: " << bestIndex << " best dist: " << bestDist << "\n";
+        std::cout << "k-d tree on GPU:\t";
+        std::cout << "best idx: " << bestIndex << "\tbest dist: " << bestDist << "\n";
 
         cudaFree(dev_best_dist);
         cudaFree(dev_best_idx);
+#endif
 
-        cudaFree(dev_array);
-        cudaFree(dev_pct);
-        cudaFree(dev_vAcc_);
+        delete[] corr;
 
-        // delete[] corr;
         return 0.0f;
     }
+
+
+    //============================================
+    //            Flattened k-d tree
+    //============================================
+    FlattenedKDTree::FlattenedKDTree(const KDTree& kdt, const PointCloud& pct)
+    {
+        thrust::host_vector<ArrayNode> h_array;
+        thrust::host_vector<uint32_t> h_vAcc = kdt.vAcc_;  // Copy vAcc to host vector
+        thrust::host_vector<Point3D> h_pct(pct.begin(), pct.end());
+
+        // Convert KDTree to array on the host
+        size_t currentIndex = 0;
+        flatten_KDTree(kdt.root_node_, h_array, currentIndex);
+
+        // Transfer to device
+        d_array = h_array;
+        d_vAcc = h_vAcc;
+        d_pct = h_pct;
+    }
+
+    void FlattenedKDTree::flatten_KDTree(const KDTree::Node* root, thrust::host_vector<ArrayNode>& array, size_t& currentIndex)
+    {
+        if (root == nullptr) return;
+
+        size_t index = currentIndex++;
+        array.resize(index + 1);
+
+        if (root->child1 == nullptr && root->child2 == nullptr) {
+            // Leaf node
+            array[index].is_leaf = true;
+            array[index].data.leaf.left = root->node_type.lr.left;
+            array[index].data.leaf.right = root->node_type.lr.right;
+        }
+        else {
+            // Non-leaf node
+            array[index].is_leaf = false;
+            array[index].data.nonleaf.divfeat = root->node_type.sub.divfeat;
+            array[index].data.nonleaf.divlow = root->node_type.sub.divlow;
+            array[index].data.nonleaf.divhigh = root->node_type.sub.divhigh;
+
+            // Recursively flatten left and right child nodes
+            size_t child1Index = currentIndex;
+            flatten_KDTree(root->child1, array, currentIndex);
+            array[index].data.nonleaf.child1 = child1Index;
+
+            size_t child2Index = currentIndex;
+            flatten_KDTree(root->child2, array, currentIndex);
+            array[index].data.nonleaf.child2 = child2Index;
+        }
+    }
+
+    __device__ float distanceSquared(const Point3D p1, const Point3D p2)
+    {
+        float dx = p1.x - p2.x;
+        float dy = p1.y - p2.y;
+        float dz = p1.z - p2.z;
+        return dx * dx + dy * dy + dz * dz;
+    }
+
+    __device__ void FlattenedKDTree::find_nearest_neighbor(const Point3D query, size_t index, float &best_dist, size_t &best_idx, int depth)
+    {
+        if (index >= d_array.size()) return;
+
+        const ArrayNode& node = d_array[index];
+        if (node.is_leaf)
+        {
+            // Leaf node: Check all points in the leaf node
+            size_t left = node.data.leaf.left;
+            size_t right = node.data.leaf.right;
+            for (size_t i = left; i <= right; i++)
+            {
+                float dist = distanceSquared(query, d_pct[d_vAcc[i]]);
+                if (dist < best_dist)
+                {
+                    best_dist = dist;
+                    best_idx = d_vAcc[i];
+                }
+            }
+        }
+        else
+        {
+            // Non-leaf node: Determine which child to search
+            int axis = node.data.nonleaf.divfeat;
+            float diff = query[axis] - node.data.nonleaf.divlow;
+
+            // Choose the near and far child based on comparison
+            size_t nearChild = diff < 0 ? node.data.nonleaf.child1 : node.data.nonleaf.child2;
+            size_t farChild = diff < 0 ? node.data.nonleaf.child2 : node.data.nonleaf.child1;
+
+            // Search near child
+            find_nearest_neighbor(query, nearChild, best_dist, best_idx, depth + 1);
+
+            // Search far child if needed
+            if (diff * diff < best_dist)
+            {
+                find_nearest_neighbor(query, farChild, best_dist, best_idx, depth + 1);
+            }
+        }
+    }
+
 }
