@@ -1,6 +1,10 @@
 #ifndef COMMON_HPP
 #define COMMON_HPP
+#include <iostream>
+#include <sstream>
 #include <string>
+#include <chrono>
+#include <iomanip>
 #include <vector>
 #include <cuda.h>
 #include <cuda_runtime.h>
@@ -109,6 +113,72 @@ namespace icp
     size_t load_cloud_ply(const string ply_filepath, const float subsample, PointCloud &cloud);
     
     size_t load_cloud_txt(const string txt_filepath, const float subsample, PointCloud &cloud);
+
+
+    enum class LogLevel 
+    {
+        DEBUG,
+        INFO,
+        WARNING,
+        ERROR
+    };
+
+    class Logger 
+    {
+    public:
+        explicit Logger(LogLevel level) : level_(level) {}
+
+        // Overload << operator for streaming
+        template <typename T>
+        Logger& operator<<(const T& msg) 
+        {
+            buffer_ << msg; // Stream the message into the buffer
+            return *this;
+        }
+
+        // Destructor: automatically flushes and prints the log when the object goes out of scope
+        ~Logger() 
+        {
+            std::string color, prefix;
+            switch (level_) 
+            {
+                case LogLevel::DEBUG:
+                    color = "\033[34m"; // Blue
+                    prefix = "[Debug " + get_current_time() + "] ";
+                    break;
+                case LogLevel::INFO:
+                    color = "\033[32m"; // Green
+                    prefix = "[Info " + get_current_time() + "] ";
+                    break;
+                case LogLevel::WARNING:
+                    color = "\033[33m"; // Yellow
+                    prefix = "[Warning " + get_current_time() + "] ";
+                    break;
+                case LogLevel::ERROR:
+                    color = "\033[31m"; // Red
+                    prefix = "[Error " + get_current_time() + "] ";
+                    break;
+            }
+            // Print the final message with color
+            std::cout << color << prefix << buffer_.str() << "\033[0m" << "\n";
+        }
+
+    private:
+        LogLevel level_;
+        std::ostringstream buffer_;
+
+        // Helper function to get the current timestamp
+        std::string get_current_time() 
+        {
+            auto now = std::chrono::system_clock::now();
+            auto in_time_t = std::chrono::system_clock::to_time_t(now);
+            std::tm buf{};
+            localtime_r(&in_time_t, &buf); // Thread-safe version of localtime
+            std::ostringstream ss;
+            ss << std::put_time(&buf, "%H:%M:%S");
+            return ss.str();
+        }
+    };
 }
 
 #endif // COMMON_HPP

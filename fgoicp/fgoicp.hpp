@@ -16,8 +16,14 @@ namespace icp
             nt{load_cloud_ply(config.io.target, 1.0, pct)},
             reg{pct, nt, pcs, ns}
         {
-            std::cout << "Source points: " << ns << "\t"
-                      << "Target points: " << nt << std::endl;
+            Logger(LogLevel::INFO) << "Source points: " << ns << "\t"
+                                   << "Target points: " << nt;
+
+            // Set stack size to 16 KB to avoid stack overflow in recursion
+            if (cudaError_t err = cudaDeviceSetLimit(cudaLimitStackSize, 16384); err != cudaSuccess) 
+            {
+                Logger(LogLevel::WARNING) << "Error setting stack size: " << cudaGetErrorString(err);
+            }
         };
 
         ~PointCloudRegistration() {}

@@ -14,13 +14,15 @@ namespace icp
     //============================================
     //            Flattened k-d tree
     //============================================
+
     class FlattenedKDTree
     {
     public:
         struct ArrayNode
         {
             bool is_leaf;
-
+            
+            // Leaf or Non-leaf node data
             union {
                 // Leaf node data
                 struct {
@@ -29,7 +31,7 @@ namespace icp
 
                 // Non-leaf node data
                 struct {
-                    int32_t divfeat;           // Dimension used for subdivision
+                    int32_t divfeat;       // Dimension used for subdivision
                     float divlow, divhigh; // Range values used for subdivision
                     size_t child1, child2; // Indices of child nodes in the array
                 } nonleaf;
@@ -43,12 +45,11 @@ namespace icp
         FlattenedKDTree(const KDTree& kdt, const PointCloud& pct);
 
         /**
-            @brief  Finds the nearest neighbor with the flattened k-d tree.
-            @param  query     - point in the source point cloud
-            @param  best_dist - shortest distance found
-            @param  best_idx  - index of the nearest point in the target point cloud
-            @retval           -
-        **/
+         * @brief  Finds the nearest neighbor with the flattened k-d tree.
+         * @param  query      point in the source point cloud
+         * @param  best_dist  shortest distance found
+         * @param  best_idx   index of the nearest point in the target point cloud
+         */
         __device__ void find_nearest_neighbor(const Point3D query, float& best_dist, size_t& best_idx)
         {
             find_nearest_neighbor(query, 0, best_dist, best_idx, 0);
@@ -63,6 +64,7 @@ namespace icp
     //============================================
     //                Registration
     //============================================
+
     class Registration
     {
     public:
@@ -80,12 +82,11 @@ namespace icp
             cudaMalloc((void**)&dev_fkdt, sizeof(FlattenedKDTree));
             cudaMemcpy(dev_fkdt, &fkdt, sizeof(FlattenedKDTree), cudaMemcpyHostToDevice);
 
-            std::cout << "KD-tree built with " << pct.size() << " points." << std::endl;
+            Logger(LogLevel::INFO) << "KD-tree built with " << pct.size() << " points";
 
 #if TEST_KDTREE
             // Test kd-tree
             glm::vec3 queryPoint = this->pcs[1152];
-            std::cout << queryPoint.x << ", " << queryPoint.y << ", " << queryPoint.z << "\n";
             float query[3] = { queryPoint.x, queryPoint.y, queryPoint.z };
 
             size_t nearestIndex;
@@ -94,8 +95,7 @@ namespace icp
             resultSet.init(&nearestIndex, &outDistSqr);
 
             kdt_target.findNeighbors(resultSet, query, nanoflann::SearchParameters(10));
-            std::cout << "k-d tree on CPU:\t";
-            std::cout << "best idx: " << nearestIndex << " best dist: " << outDistSqr << "\n";
+            Logger(LogLevel::DEBUG) << "k-d tree on CPU:\t" << "best idx: " << nearestIndex << " best dist: " << outDistSqr;
 #endif
         }
 
@@ -109,24 +109,16 @@ namespace icp
          * 
          * @return float: MSE error
          */
-        __host__ float run(Rotation &q, glm::vec3 &t);
+        float run(Rotation &q, glm::vec3 &t);
 
     private:
-        /**
-         * @brief Target point cloud
-         */
+        // Target point cloud
         const PointCloud &pct;
-        /**
-         * @brief Source point cloud
-         */
+        // Source point cloud
         const PointCloud &pcs;
-        /**
-         * @brief Number of target cloud points
-         */
+        //Number of target cloud points
         const size_t nt;
-        /**
-         * @brief Number of source cloud points
-         */
+        // Number of source cloud points
         const size_t ns;
 
         FlattenedKDTree* dev_fkdt;

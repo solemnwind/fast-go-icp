@@ -101,8 +101,7 @@ namespace icp
         cudaMemcpy(&bestDist, dev_best_dist, sizeof(float), cudaMemcpyDeviceToHost);
         cudaMemcpy(&bestIndex, dev_best_idx, sizeof(size_t), cudaMemcpyDeviceToHost);
 
-        std::cout << "k-d tree on GPU:\t";
-        std::cout << "best idx: " << bestIndex << "\tbest dist: " << bestDist << "\n";
+        Logger(LogLevel::DEBUG) << "k-d tree on GPU:\t" << "best idx: " << bestIndex << "\tbest dist: " << bestDist;
 
         cudaFree(dev_best_dist);
         cudaFree(dev_best_idx);
@@ -117,6 +116,7 @@ namespace icp
     //============================================
     //            Flattened k-d tree
     //============================================
+    
     FlattenedKDTree::FlattenedKDTree(const KDTree& kdt, const PointCloud& pct)
     {
         thrust::host_vector<ArrayNode> h_array;
@@ -164,7 +164,7 @@ namespace icp
         }
     }
 
-    __device__ float distanceSquared(const Point3D p1, const Point3D p2)
+    __device__ float distance_squared(const Point3D p1, const Point3D p2)
     {
         float dx = p1.x - p2.x;
         float dy = p1.y - p2.y;
@@ -184,7 +184,7 @@ namespace icp
             size_t right = node.data.leaf.right;
             for (size_t i = left; i <= right; i++)
             {
-                float dist = distanceSquared(query, d_pct[d_vAcc[i]]);
+                float dist = distance_squared(query, d_pct[d_vAcc[i]]);
                 if (dist < best_dist)
                 {
                     best_dist = dist;
