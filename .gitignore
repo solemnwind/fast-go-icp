@@ -33,6 +33,7 @@
 
 # Build Directory
 build
+ninja
 
 # IDE Configurations
 .vscode

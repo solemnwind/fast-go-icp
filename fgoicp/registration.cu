@@ -15,24 +15,21 @@ namespace icp
         Point3D ps_transformed;
     };
 
-    __global__ void kernFindNearestNeighbor(int N, glm::mat3 R, glm::vec3 t, const Point3D* dev_pcs, const KDTree* dev_kdt, Correspondence* dev_corrs)
+    __global__ void kernFindNearestNeighbor(int N, glm::mat3 R, glm::vec3 t, const Point3D* dev_pcs, const FlattenedKDTree* dev_fkdt, Correspondence* dev_corrs)
     {
         int index = (blockIdx.x * blockDim.x) + threadIdx.x;
         if (index >= N) { return; }
 
-        // Point3D query_point = R * dev_pcs[index] + t;
-        // const float query[] {query_point.x, query_point.y, query_point.z};
+        Point3D query_point = R * dev_pcs[index] + t;
 
-        // size_t nearest_index;
-        // float distance_squared;
-        // nanoflann::KNNResultSet<float> result(1);
-        // result.init(&nearest_index, &distance_squared);
-        // dev_kdt->findNeighbors(result, query, nanoflann::SearchParameters(1));
-
-        // dev_corrs[index].dist_squared = result;
-        // dev_corrs[index].idx_s = index;
-        // dev_corrs[index].idx_t = ret.idx_target;
-        // dev_corrs[index].ps_transformed = query_point;
+        size_t nearest_index = 0;
+        float distance_squared = INF;
+        dev_fkdt->find_nearest_neighbor(query_point, distance_squared, nearest_index);
+        
+        dev_corrs[index].dist_squared = distance_squared;
+        dev_corrs[index].idx_s = index;
+        dev_corrs[index].idx_t = nearest_index;
+        dev_corrs[index].ps_transformed = query_point;
     }
 
     __global__ void kernSetRegistrationMatrices(int N, Rotation q, glm::vec3 t, const Point3D* dev_pcs, const Point3D* dev_pct, const Correspondence* dev_corrs, float* dev_mat_pcs, float* dev_mat_pct)
@@ -65,7 +62,7 @@ namespace icp
     }
 #endif
     
-    __host__ float Registration::run(Rotation &q, glm::vec3 &t) 
+    float Registration::run(Rotation &q, glm::vec3 &t) 
     {
         size_t num_crpnds = ns;
 
@@ -172,7 +169,7 @@ namespace icp
         return dx * dx + dy * dy + dz * dz;
     }
 
-    __device__ void FlattenedKDTree::find_nearest_neighbor(const Point3D query, size_t index, float &best_dist, size_t &best_idx, int depth)
+    __device__ void FlattenedKDTree::find_nearest_neighbor(const Point3D query, size_t index, float &best_dist, size_t &best_idx, int depth) const
     {
         if (index >= d_array.size()) return;
 

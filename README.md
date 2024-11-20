@@ -4,6 +4,7 @@
 
 * **Authors**: Mufeng Xu & Zhaojin Sun
 * Tested on: 
+    * Windows 11/Ubuntu 24.04, i9-13900H @ 2.6GHz 32GB, RTX 4080 Laptop 12GB (Personal Computer)
 
 ## Demo
 
@@ -25,13 +26,14 @@ global minimum is searched in the $SE(3)$ space (3D Rigid Rotation and Translati
 Instead of directly searching over $SE(3)$, it is proposed to launch an outer-BnB,
 which searches over the $SO(3)$ space (3D Rotation) with BnB algorithm,
 and for each branch, an inner-BnB function, which searches over the $\mathbb{R}^3$ space,
-will be invoked.
+will be invoked. 
 
 ## Dependencies
 
+- OpenGL Mathematics (GLM) 
 - [TOML++](https://github.com/marzer/tomlplusplus)
 - [tinyply](https://github.com/ddiakopoulos/tinyply)
-<!-- - [nanoflann](https://github.com/jlblancoc/nanoflann) -->
+- [nanoflann](https://github.com/jlblancoc/nanoflann)
 
 ## Reference
 
