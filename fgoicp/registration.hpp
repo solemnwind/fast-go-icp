@@ -7,10 +7,10 @@
 #include <thrust/device_vector.h>
 #include <thrust/host_vector.h>
 
-#define TEST_KDTREE 1
-
 namespace icp
 {
+    using PointCloudDev = thrust::device_vector<Point3D>;
+
     //============================================
     //            Flattened k-d tree
     //============================================
@@ -72,10 +72,35 @@ namespace icp
 
     class Registration
     {
+    private:
+        // Target point cloud
+        const PointCloud& pct;
+        // Source point cloud
+        const PointCloud& pcs;
+        //Number of target cloud points
+        const size_t nt;
+        // Number of source cloud points
+        const size_t ns;
+        // Target point cloud on device
+        const PointCloudDev d_pct;
+        // Source point cloud on device
+        const PointCloudDev d_pcs;
+
+        FlattenedKDTree* h_fkdt;
+        FlattenedKDTree* d_fkdt;
+
+        size_t max_iter;
+        float best_error;
+        RotNode best_rnode;
+        TransNode best_tnode;
+
     public:
         Registration(const PointCloud &pct, size_t nt, const PointCloud &pcs, size_t ns) : 
             pct(pct), pcs(pcs),
-            nt(nt), ns(ns)
+            nt(nt), ns(ns),
+            d_pct(pct.begin(), pct.end()),
+            d_pcs(pcs.begin(), pcs.end()),
+            max_iter(10), best_error(M_INF)
         {
             // Create and build the KDTree
             PointCloudAdaptor pct_adaptor(pct);
@@ -88,26 +113,6 @@ namespace icp
             cudaMemcpy(d_fkdt, h_fkdt, sizeof(FlattenedKDTree), cudaMemcpyHostToDevice);
 
             Logger(LogLevel::Info) << "KD-tree built with " << pct.size() << " points";
-
-#if TEST_KDTREE
-            // Test k-d tree
-            glm::vec3 queryPoint = this->pcs[1152];
-            float query[3] = { queryPoint.x, queryPoint.y, queryPoint.z };
-
-            size_t nearestIndex;
-            float outDistSqr;
-            nanoflann::KNNResultSet<float> resultSet(1);
-            resultSet.init(&nearestIndex, &outDistSqr);
-
-            kdt_target.findNeighbors(resultSet, query, nanoflann::SearchParameters(10));
-            Logger(LogLevel::Debug) << "Nanoflann k-d tree on CPU:\n\t\t" 
-                                    << "best idx: " << nearestIndex << "\tbest dist: " << outDistSqr;
-
-            // Test flattened k-d tree on CPU
-            h_fkdt->find_nearest_neighbor(queryPoint, outDistSqr, nearestIndex);
-            Logger(LogLevel::Debug) << "Flattened k-d tree on CPU:\n\t\t" 
-                                    << "best idx: " << nearestIndex << "\tbest dist: " << outDistSqr; 
-#endif
         }
 
         ~Registration()
@@ -117,26 +122,29 @@ namespace icp
         }
 
         /**
-         * @brief Run single-step ICP registration algorithm.
+         * @brief Run Go-ICP registration algorithm.
          * 
          * @return float: MSE error
          */
         float run(Rotation &q, glm::vec3 &t);
 
     private:
-        // Target point cloud
-        const PointCloud &pct;
-        // Source point cloud
-        const PointCloud &pcs;
-        //Number of target cloud points
-        const size_t nt;
-        // Number of source cloud points
-        const size_t ns;
+        /**
+         * @brief Perform branch-and-bound algorithm in Rotation Space SO(3)
+         * 
+         * @param rnode rotation node
+         * @return float
+         */
+        float branch_and_bound_SO3(RotNode &rnode);
 
-        FlattenedKDTree* h_fkdt;
-        FlattenedKDTree* d_fkdt;
-
-        size_t max_iter = 10;
+        /**
+         * @brief Perform branch-and-bound algorithm in Translation Space R(3)
+         * 
+         * @param rot_uncertain_radius rotational uncertainty radius
+         * @param tnode translation node
+         * @return float 
+         */
+        float branch_and_bound_R3(const float *rot_uncertain_radius, TransNode &tnode);
     };
 
 }

@@ -16,17 +16,20 @@
 #include <windows.h>
 #endif
 
+#define M_PI    3.141592653589793f
+#define M_INF   1E+10f
+#define M_SQRT3 1.732050807568877f
+
 using std::string;
 
 namespace icp
 {
-    const float PI = 3.141592653589793f;
-    const float INF = 1e10f;
-
     struct Rotation
     {
         float rr, x, y, z;
         glm::mat3 R;
+
+        Rotation() : Rotation(0.0f, 0.0f, 0.0f) {}
 
         Rotation(float x, float y, float z) : 
             x(x), y(y), z(z)
@@ -46,6 +49,10 @@ namespace icp
                 2 * (xz - wy),      2 * (yz + wx),      ww - xx - yy + zz
             );
         }
+
+        Rotation(Rotation &other) :
+            rr(other.rr), x(other.x), y(other.y), z(other.z), R(other.R)
+        {}
     };
 
     /**

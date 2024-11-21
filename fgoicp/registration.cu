@@ -3,10 +3,29 @@
 #include <cuda_runtime.h>
 #include <device_launch_parameters.h>
 #include <thrust/device_vector.h>
+#include <thrust/reduce.h>
 #include <iostream>
+
+#define CUDA_DEBUG 1
 
 namespace icp
 {
+    void cudaCheckError(string info, bool silent = true)
+    {
+#if CUDA_DEBUG
+        cudaDeviceSynchronize();
+        cudaError_t err = cudaGetLastError();
+        if (err != cudaSuccess)
+        {
+            Logger(LogLevel::Error) << info << " failed: " << cudaGetErrorString(err);
+        }
+        else if (!silent)
+        {
+            Logger(LogLevel::Debug) << info << " success.";
+        }
+#endif
+    }
+
     struct Correspondence
     {
         size_t idx_s;
@@ -24,7 +43,7 @@ namespace icp
 
         size_t nearest_index = 0;
 
-        float distance_squared = 1e+10f;
+        float distance_squared = M_INF;
         d_fkdt->find_nearest_neighbor(query_point, distance_squared, nearest_index);
 
         dev_corrs[index].dist_squared = distance_squared;
@@ -53,61 +72,57 @@ namespace icp
         dev_mat_pcs[mat_idx + 2] = ps.z;
     }
 
-#if TEST_KDTREE
-    __global__ void kernTestKDTreeLookUp(int N, Point3D query, FlattenedKDTree* fkdt, float* min_dists, size_t* min_indices)
+    __global__ void kernComputeRegistrationError(int N, glm::mat3 R, glm::vec3 t, const Point3D *d_pcs, const FlattenedKDTree* d_fkdt, float* d_errors)
     {
         int index = (blockIdx.x * blockDim.x) + threadIdx.x;
         if (index >= N) { return; }
 
-        fkdt->find_nearest_neighbor(query, *min_dists, *min_indices);
+        Point3D source_point = d_pcs[index];
+        Point3D query_point = R * source_point + t;
+
+        size_t nearest_index = 0;
+        float distance_squared = M_INF;
+        d_fkdt->find_nearest_neighbor(query_point, distance_squared, nearest_index);
+
+        d_errors[index] = distance_squared;
     }
-#endif
     
     float Registration::run(Rotation &q, glm::vec3 &t) 
     {
-        size_t num_crpnds = ns;
+        // Initialize with no rotation
+        RotNode init_rnode{ {0.0f, 0.0f, 0.0f}, 1.0f, 0.0f, 0.0f };
 
-        Correspondence* corr = new Correspondence[num_crpnds];
+        float* dev_errors;
+        cudaMalloc((void**)&dev_errors, sizeof(float) * ns);
 
-        float* mat_pct = new float[num_crpnds * 3];
-        float* mat_pcs = new float[num_crpnds * 3];
+        size_t block_size = 256;
+        dim3 threads_per_block(block_size);
+        dim3 blocks_per_grid((ns + block_size - 1) / block_size);
+        kernComputeRegistrationError <<<blocks_per_grid, threads_per_block>>> (
+            ns, 
+            init_rnode.q.R, 
+            glm::vec3(0.f, 0.f, 0.f), 
+            thrust::raw_pointer_cast(d_pcs.data()),
+            d_fkdt, 
+            dev_errors);
+        cudaDeviceSynchronize();
+        cudaCheckError("Kernel launch", false);
 
-        glm::vec3 target_centroid {0.0f, 0.0f, 0.0f};
-        glm::vec3 source_centroid {0.0f, 0.0f, 0.0f};
-
-        float error = 0;
-
-        for (size_t iter = 0; iter < max_iter; ++iter)
-        {
+        thrust::device_ptr<float> dev_errors_ptr(dev_errors);
+        best_error = thrust::reduce(dev_errors_ptr, dev_errors_ptr + ns, 0.0f);
+        cudaCheckError("thrust::reduce", false);
+        Logger(LogLevel::Info) << "Initial Error: " << best_error;
         
-        }
+        cudaFree(dev_errors);
 
-#if TEST_KDTREE
-        glm::vec3 queryPoint = this->pcs[1152];
-        float bestDist = INF;
-        size_t bestIndex;
 
-        float* dev_best_dist;
-        size_t* dev_best_idx;
-        cudaMalloc((void**)&dev_best_dist, sizeof(float) * 10);
-        cudaMalloc((void**)&dev_best_idx, sizeof(size_t) * 10);
+        best_rnode = init_rnode;
 
-        cudaMemcpy(dev_best_dist, &bestDist, sizeof(float), cudaMemcpyHostToDevice);
+        return 0.0f;
+    }
 
-        kernTestKDTreeLookUp <<<1, 1>>> (1, queryPoint, d_fkdt, dev_best_dist, dev_best_idx);
-
-        cudaMemcpy(&bestDist, dev_best_dist, sizeof(float), cudaMemcpyDeviceToHost);
-        cudaMemcpy(&bestIndex, dev_best_idx, sizeof(size_t), cudaMemcpyDeviceToHost);
-
-        Logger(LogLevel::Debug) << "Flattened k-d tree on GPU:\n\t\t" 
-                                << "best idx: " << bestIndex << "\tbest dist: " << bestDist;
-
-        cudaFree(dev_best_dist);
-        cudaFree(dev_best_idx);
-#endif
-
-        delete[] corr;
-
+    float branch_and_bound_SO3(RotNode& rnode)
+    {
         return 0.0f;
     }
 
