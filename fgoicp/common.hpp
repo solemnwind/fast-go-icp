@@ -12,6 +12,10 @@
 #include <glm/vec3.hpp>
 #include <glm/mat3x3.hpp>
 
+#if defined(_WIN32) || defined(_WIN64)
+#include <windows.h>
+#endif
+
 using std::string;
 
 namespace icp
@@ -117,10 +121,10 @@ namespace icp
 
     enum class LogLevel 
     {
-        DEBUG,
-        INFO,
-        WARNING,
-        ERROR
+        Debug,
+        Info,
+        Warning,
+        Error
     };
 
     class Logger 
@@ -142,19 +146,19 @@ namespace icp
             std::string color, prefix;
             switch (level_) 
             {
-                case LogLevel::DEBUG:
+                case LogLevel::Debug:
                     color = "\033[34m"; // Blue
                     prefix = "[Debug " + get_current_time() + "] ";
                     break;
-                case LogLevel::INFO:
+                case LogLevel::Info:
                     color = "\033[32m"; // Green
                     prefix = "[Info " + get_current_time() + "] ";
                     break;
-                case LogLevel::WARNING:
+                case LogLevel::Warning:
                     color = "\033[33m"; // Yellow
                     prefix = "[Warning " + get_current_time() + "] ";
                     break;
-                case LogLevel::ERROR:
+                case LogLevel::Error:
                     color = "\033[31m"; // Red
                     prefix = "[Error " + get_current_time() + "] ";
                     break;
@@ -172,8 +176,12 @@ namespace icp
         {
             auto now = std::chrono::system_clock::now();
             auto in_time_t = std::chrono::system_clock::to_time_t(now);
-            std::tm buf{};
-            localtime_r(&in_time_t, &buf); // Thread-safe version of localtime
+            std::tm buf{}; 
+#if defined(_WIN32) || defined(_WIN64)
+            localtime_s(&buf, &in_time_t); // Thread-safe on Windows
+#else
+            localtime_r(&in_time_t, &buf); // Thread-safe on Linux
+#endif
             std::ostringstream ss;
             ss << std::put_time(&buf, "%H:%M:%S");
             return ss.str();

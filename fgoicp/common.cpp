@@ -16,7 +16,7 @@ namespace icp
           translation{0, 0, 0, 0, 0, 0}
     {
         string base_filename = toml_filepath.substr(toml_filepath.find_last_of("/\\") + 1);
-        Logger(LogLevel::INFO) << "Reading configurations from " << base_filename;
+        Logger(LogLevel::Info) << "Reading configurations from " << base_filename;
         parse_toml(toml_filepath);
     }
 
@@ -40,7 +40,7 @@ namespace icp
         }
  
         std::optional<string> desc = tbl["info"]["description"].value<string>();
-        Logger(LogLevel::INFO) << desc.value();
+        Logger(LogLevel::Info) << desc.value();
 
         // Parse IO section
         if (tbl.contains("io"))
@@ -89,7 +89,7 @@ namespace icp
             translation.zmax = translation_section["zmax"].value_or(1.0f);
         }
 
-        Logger(LogLevel::INFO) << "Config parsed successfully";
+        Logger(LogLevel::Info) << "Config parsed successfully";
     }
 
     size_t load_cloud_ply(const string ply_filepath, const float subsample, PointCloud &cloud)
