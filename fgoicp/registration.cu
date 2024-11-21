@@ -15,7 +15,7 @@ namespace icp
         Point3D ps_transformed;
     };
 
-    __global__ void kernFindNearestNeighbor(int N, glm::mat3 R, glm::vec3 t, const Point3D* dev_pcs, const FlattenedKDTree* dev_fkdt, Correspondence* dev_corrs)
+    __global__ void kernFindNearestNeighbor(int N, glm::mat3 R, glm::vec3 t, const Point3D* dev_pcs, const FlattenedKDTree* d_fkdt, Correspondence* dev_corrs)
     {
         int index = (blockIdx.x * blockDim.x) + threadIdx.x;
         if (index >= N) { return; }
@@ -24,7 +24,7 @@ namespace icp
 
         size_t nearest_index = 0;
         float distance_squared = INF;
-        dev_fkdt->find_nearest_neighbor(query_point, distance_squared, nearest_index);
+        d_fkdt->find_nearest_neighbor(query_point, distance_squared, nearest_index);
         
         dev_corrs[index].dist_squared = distance_squared;
         dev_corrs[index].idx_s = index;
@@ -78,7 +78,7 @@ namespace icp
 
         for (size_t iter = 0; iter < max_iter; ++iter)
         {
-         
+        
         }
 
 #if TEST_KDTREE
@@ -93,12 +93,13 @@ namespace icp
 
         cudaMemcpy(dev_best_dist, &bestDist, sizeof(float), cudaMemcpyHostToDevice);
 
-        kernTestKDTreeLookUp <<<1, 1>>> (1, queryPoint, dev_fkdt, dev_best_dist, dev_best_idx);
+        kernTestKDTreeLookUp <<<1, 1>>> (1, queryPoint, d_fkdt, dev_best_dist, dev_best_idx);
 
         cudaMemcpy(&bestDist, dev_best_dist, sizeof(float), cudaMemcpyDeviceToHost);
         cudaMemcpy(&bestIndex, dev_best_idx, sizeof(size_t), cudaMemcpyDeviceToHost);
 
-        Logger(LogLevel::DEBUG) << "k-d tree on GPU:\t" << "best idx: " << bestIndex << "\tbest dist: " << bestDist;
+        Logger(LogLevel::DEBUG) << "Flattened k-d tree on GPU:\n\t\t" 
+                                << "best idx: " << bestIndex << "\tbest dist: " << bestDist;
 
         cudaFree(dev_best_dist);
         cudaFree(dev_best_idx);
@@ -114,12 +115,10 @@ namespace icp
     //            Flattened k-d tree
     //============================================
     
-    FlattenedKDTree::FlattenedKDTree(const KDTree& kdt, const PointCloud& pct)
+    FlattenedKDTree::FlattenedKDTree(const KDTree& kdt, const PointCloud& pct) :
+        h_vAcc{kdt.vAcc_},
+        h_pct{pct.begin(), pct.end()}
     {
-        thrust::host_vector<ArrayNode> h_array;
-        thrust::host_vector<uint32_t> h_vAcc = kdt.vAcc_;  // Copy vAcc to host vector
-        thrust::host_vector<Point3D> h_pct(pct.begin(), pct.end());
-
         // Convert KDTree to array on the host
         size_t currentIndex = 0;
         flatten_KDTree(kdt.root_node_, h_array, currentIndex);
@@ -161,7 +160,7 @@ namespace icp
         }
     }
 
-    __device__ float distance_squared(const Point3D p1, const Point3D p2)
+    __device__ __host__ float distance_squared(const Point3D p1, const Point3D p2)
     {
         float dx = p1.x - p2.x;
         float dy = p1.y - p2.y;
@@ -169,11 +168,15 @@ namespace icp
         return dx * dx + dy * dy + dz * dz;
     }
 
-    __device__ void FlattenedKDTree::find_nearest_neighbor(const Point3D query, size_t index, float &best_dist, size_t &best_idx, int depth) const
+    __device__ __host__ void FlattenedKDTree::find_nearest_neighbor(const Point3D query, size_t index, float &best_dist, size_t &best_idx, int depth) const
     {
+#ifdef  __CUDA_ARCH__
         if (index >= d_array.size()) return;
-
         const ArrayNode& node = d_array[index];
+#else
+        if (index >= h_array.size()) return;
+        const ArrayNode& node = h_array[index]; 
+#endif
         if (node.is_leaf)
         {
             // Leaf node: Check all points in the leaf node
@@ -181,12 +184,21 @@ namespace icp
             size_t right = node.data.leaf.right;
             for (size_t i = left; i <= right; i++)
             {
+#ifdef __CUDA_ARCH__
                 float dist = distance_squared(query, d_pct[d_vAcc[i]]);
                 if (dist < best_dist)
                 {
                     best_dist = dist;
                     best_idx = d_vAcc[i];
                 }
+#else
+                float dist = distance_squared(query, h_pct[h_vAcc[i]]);
+                if (dist < best_dist)
+                {
+                    best_dist = dist;
+                    best_idx = h_vAcc[i];
+                }
+#endif
             }
         }
         else

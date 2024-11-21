@@ -17,7 +17,7 @@ namespace icp
 
     class FlattenedKDTree
     {
-    public:
+    private:
         struct ArrayNode
         {
             bool is_leaf;
@@ -38,10 +38,15 @@ namespace icp
             } data;
         };
 
+        thrust::host_vector<ArrayNode> h_array;
+        thrust::host_vector<uint32_t> h_vAcc;
+        thrust::host_vector<Point3D> h_pct;
+
         thrust::device_vector<ArrayNode> d_array;  // Flattened KD-tree on device
         thrust::device_vector<uint32_t> d_vAcc;    // Indices mapping
         thrust::device_vector<Point3D> d_pct;      // Point cloud on device
 
+    public:
         FlattenedKDTree(const KDTree& kdt, const PointCloud& pct);
 
         /**
@@ -50,7 +55,7 @@ namespace icp
          * @param  best_dist  shortest distance found
          * @param  best_idx   index of the nearest point in the target point cloud
          */
-        __device__ void find_nearest_neighbor(const Point3D query, float& best_dist, size_t& best_idx) const
+        __device__ __host__ void find_nearest_neighbor(const Point3D query, float& best_dist, size_t& best_idx) const
         {
             find_nearest_neighbor(query, 0, best_dist, best_idx, 0);
         }
@@ -58,7 +63,7 @@ namespace icp
     private:
         void flatten_KDTree(const KDTree::Node* root, thrust::host_vector<ArrayNode>& array, size_t& currentIndex);
 
-        __device__ void find_nearest_neighbor(const Point3D query, size_t index, float& best_dist, size_t& best_idx, int depth) const;
+        __device__ __host__ void find_nearest_neighbor(const Point3D query, size_t index, float& best_dist, size_t& best_idx, int depth) const;
     };
 
     //============================================
@@ -78,14 +83,14 @@ namespace icp
             kdt_target.buildIndex();
 
             // Flatten k-d tree and copy to device
-            FlattenedKDTree fkdt(kdt_target, pct);
-            cudaMalloc((void**)&dev_fkdt, sizeof(FlattenedKDTree));
-            cudaMemcpy(dev_fkdt, &fkdt, sizeof(FlattenedKDTree), cudaMemcpyHostToDevice);
+            h_fkdt = new FlattenedKDTree(kdt_target, pct);
+            cudaMalloc((void**)&d_fkdt, sizeof(FlattenedKDTree));
+            cudaMemcpy(d_fkdt, h_fkdt, sizeof(FlattenedKDTree), cudaMemcpyHostToDevice);
 
             Logger(LogLevel::INFO) << "KD-tree built with " << pct.size() << " points";
 
 #if TEST_KDTREE
-            // Test kd-tree
+            // Test k-d tree
             glm::vec3 queryPoint = this->pcs[1152];
             float query[3] = { queryPoint.x, queryPoint.y, queryPoint.z };
 
@@ -95,13 +100,20 @@ namespace icp
             resultSet.init(&nearestIndex, &outDistSqr);
 
             kdt_target.findNeighbors(resultSet, query, nanoflann::SearchParameters(10));
-            Logger(LogLevel::DEBUG) << "k-d tree on CPU:\t" << "best idx: " << nearestIndex << " best dist: " << outDistSqr;
+            Logger(LogLevel::DEBUG) << "Nanoflann k-d tree on CPU:\n\t\t" 
+                                    << "best idx: " << nearestIndex << "\tbest dist: " << outDistSqr;
+
+            // Test flattened k-d tree on CPU
+            h_fkdt->find_nearest_neighbor(queryPoint, outDistSqr, nearestIndex);
+            Logger(LogLevel::DEBUG) << "Flattened k-d tree on CPU:\n\t\t" 
+                                    << "best idx: " << nearestIndex << "\tbest dist: " << outDistSqr; 
 #endif
         }
 
         ~Registration()
         {
-            // free kdt_target;
+            delete h_fkdt;
+            cudaFree(d_fkdt);
         }
 
         /**
@@ -121,10 +133,10 @@ namespace icp
         // Number of source cloud points
         const size_t ns;
 
-        FlattenedKDTree* dev_fkdt;
+        FlattenedKDTree* h_fkdt;
+        FlattenedKDTree* d_fkdt;
 
         size_t max_iter = 10;
-
     };
 
 }
