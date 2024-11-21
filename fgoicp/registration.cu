@@ -23,7 +23,7 @@ namespace icp
         Point3D query_point = R * dev_pcs[index] + t;
 
         size_t nearest_index = 0;
-        float distance_squared = INF;
+        float distance_squared = 1e+10f;
         dev_fkdt->find_nearest_neighbor(query_point, distance_squared, nearest_index);
         
         dev_corrs[index].dist_squared = distance_squared;
@@ -98,7 +98,7 @@ namespace icp
         cudaMemcpy(&bestDist, dev_best_dist, sizeof(float), cudaMemcpyDeviceToHost);
         cudaMemcpy(&bestIndex, dev_best_idx, sizeof(size_t), cudaMemcpyDeviceToHost);
 
-        Logger(LogLevel::DEBUG) << "k-d tree on GPU:\t" << "best idx: " << bestIndex << "\tbest dist: " << bestDist;
+        Logger(LogLevel::Debug) << "k-d tree on GPU:\t" << "best idx: " << bestIndex << "\tbest dist: " << bestDist;
 
         cudaFree(dev_best_dist);
         cudaFree(dev_best_idx);

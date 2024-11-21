@@ -82,7 +82,7 @@ namespace icp
             cudaMalloc((void**)&dev_fkdt, sizeof(FlattenedKDTree));
             cudaMemcpy(dev_fkdt, &fkdt, sizeof(FlattenedKDTree), cudaMemcpyHostToDevice);
 
-            Logger(LogLevel::INFO) << "KD-tree built with " << pct.size() << " points";
+            Logger(LogLevel::Info) << "KD-tree built with " << pct.size() << " points";
 
 #if TEST_KDTREE
             // Test kd-tree
@@ -95,7 +95,7 @@ namespace icp
             resultSet.init(&nearestIndex, &outDistSqr);
 
             kdt_target.findNeighbors(resultSet, query, nanoflann::SearchParameters(10));
-            Logger(LogLevel::DEBUG) << "k-d tree on CPU:\t" << "best idx: " << nearestIndex << " best dist: " << outDistSqr;
+            Logger(LogLevel::Debug) << "k-d tree on CPU:\t" << "best idx: " << nearestIndex << " best dist: " << outDistSqr;
 #endif
         }
 
