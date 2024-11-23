@@ -6,19 +6,21 @@
 #include "kdtree_adaptor.hpp"
 #include <thrust/device_vector.h>
 #include <thrust/host_vector.h>
+#include <cuda_texture_types.h>
+
 
 namespace icp
 {
     using PointCloudDev = thrust::device_vector<Point3D>;
 
-    //============================================
-    //            Flattened k-d tree
-    //============================================
+    //========================================================================================
+    //                                  Flattened k-d tree
+    //========================================================================================
 
     class FlattenedKDTree
     {
     private:
-        struct ArrayNode
+        struct __align__(8) ArrayNode
         {
             bool is_leaf;
             
@@ -41,14 +43,22 @@ namespace icp
         thrust::host_vector<ArrayNode> h_array;
         thrust::host_vector<uint32_t> h_vAcc;
         thrust::host_vector<Point3D> h_pct;
+        // thrust::host_vector<float4> h_pct;
 
-        // TODO: move them to Texture for better performance
         thrust::device_vector<ArrayNode> d_array;  // Flattened KD-tree on device
         thrust::device_vector<uint32_t> d_vAcc;    // Indices mapping
-        thrust::device_vector<Point3D> d_pct;      // Point cloud on device
+        thrust::device_vector<Point3D> d_pct;       // Point cloud on device
+        // thrust::device_vector<float4> d_pct;       // Point cloud on device
+
+        // Define texture object handles
+        cudaTextureObject_t texObjArray;
+        cudaTextureObject_t texObjVAcc;
+        cudaTextureObject_t texObjPct;
 
     public:
         FlattenedKDTree(const KDTree& kdt, const PointCloud& pct);
+
+        ~FlattenedKDTree();
 
         /**
          * @brief  Finds the nearest neighbor with the flattened k-d tree.
@@ -56,7 +66,7 @@ namespace icp
          * @param  best_dist  shortest distance found
          * @param  best_idx   index of the nearest point in the target point cloud
          */
-        __device__ __host__ void find_nearest_neighbor(const Point3D query, float& best_dist, size_t& best_idx) const
+        __device__ void find_nearest_neighbor(const Point3D query, float& best_dist, size_t& best_idx) const
         {
             find_nearest_neighbor(query, 0, best_dist, best_idx, 0);
         }
@@ -64,12 +74,12 @@ namespace icp
     private:
         void flatten_KDTree(const KDTree::Node* root, thrust::host_vector<ArrayNode>& array, size_t& currentIndex);
 
-        __device__ __host__ void find_nearest_neighbor(const Point3D query, size_t index, float& best_dist, size_t& best_idx, int depth) const;
+        __device__ void find_nearest_neighbor(const Point3D query, size_t index, float& best_dist, size_t& best_idx, int depth) const;
     };
 
-    //============================================
-    //                Registration
-    //============================================
+    //========================================================================================
+    //                                     Registration
+    //========================================================================================
 
     class Registration
     {

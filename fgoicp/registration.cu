@@ -9,6 +9,9 @@
 
 namespace icp
 {
+    //========================================================================================
+    //                                     Registration
+    //========================================================================================
     __global__ void kernComputeClosetError(int N, glm::mat3 R, glm::vec3 t, const Point3D *d_pcs, const FlattenedKDTree* d_fkdt, float* d_errors)
     {
         int index = (blockIdx.x * blockDim.x) + threadIdx.x;
@@ -65,12 +68,13 @@ namespace icp
         dim3 blocks_per_grid((ns + block_size - 1) / block_size);
 
         // Launch kernel for each (R, t) pair on separate streams
-        for (size_t i = 0; i < num_matrices; ++i) {
+        for (size_t i = 0; i < num_matrices; ++i) 
+        {
             // Get the appropriate stream from the stream pool
             cudaStream_t stream = stream_pool.getStream(i);
 
             // Launch the kernel with each (R, t) on a different stream
-            kernComputeClosetError << <blocks_per_grid, threads_per_block, 0, stream >> > (
+            kernComputeClosetError <<<blocks_per_grid, threads_per_block, 0, stream>>> (
                 ns, Rs[i], ts[i],
                 thrust::raw_pointer_cast(d_pcs.data()),
                 d_fkdt,
@@ -87,7 +91,8 @@ namespace icp
         std::vector<float> sse_errors(num_matrices);
 
         // Reduce the errors for each pair
-        for (size_t i = 0; i < num_matrices; ++i) {
+        for (size_t i = 0; i < num_matrices; ++i) 
+        {
             sse_errors[i] = thrust::reduce(
                 thrust_policy,
                 dev_errors_ptr + i * ns,
@@ -106,14 +111,21 @@ namespace icp
     }
 
 
-    //============================================
-    //            Flattened k-d tree
-    //============================================
+    //========================================================================================
+    //                                  Flattened k-d tree
+    //========================================================================================
     
     FlattenedKDTree::FlattenedKDTree(const KDTree& kdt, const PointCloud& pct) :
-        h_vAcc{kdt.vAcc_},
+        h_vAcc{ kdt.vAcc_ },
         h_pct{pct.begin(), pct.end()}
     {
+        //h_pct.reserve(pct.size());
+        //for (size_t i = 0; i < pct.size(); ++i)
+        //{
+        //    Point3D p = pct[i];
+        //    h_pct.push_back(float4{ p.x, p.y, p.z, 0.0f });
+        //}
+
         // Convert KDTree to array on the host
         size_t currentIndex = 0;
         flatten_KDTree(kdt.root_node_, h_array, currentIndex);
@@ -122,6 +134,62 @@ namespace icp
         d_array = h_array;
         d_vAcc = h_vAcc;
         d_pct = h_pct;
+
+        // Create texture object for d_vAcc (uint32_t -> int)
+        cudaChannelFormatDesc channelDescVAcc = cudaCreateChannelDesc<int>();
+        cudaResourceDesc resDescVAcc = {};
+        resDescVAcc.resType = cudaResourceTypeArray;
+
+        cudaArray_t d_vAccArray;
+        cudaMallocArray(&d_vAccArray, &channelDescVAcc, d_vAcc.size());
+        cudaMemcpyToArray(d_vAccArray, 0, 0, reinterpret_cast<int*>(d_vAcc.data().get()),
+            d_vAcc.size() * sizeof(int), cudaMemcpyDeviceToDevice);
+
+        resDescVAcc.res.array.array = d_vAccArray;
+
+        cudaTextureDesc texDescVAcc = {};
+        texDescVAcc.addressMode[0] = cudaAddressModeClamp;
+        texDescVAcc.filterMode = cudaFilterModePoint;
+        texDescVAcc.readMode = cudaReadModeElementType;
+        texDescVAcc.normalizedCoords = 0;
+
+        cudaCreateTextureObject(&texObjVAcc, &resDescVAcc, &texDescVAcc, nullptr);
+
+
+        //// Create a channel description for float4
+        //cudaChannelFormatDesc channelDescPct = cudaCreateChannelDesc<float4>();
+
+        //// Allocate CUDA array for float4
+        //cudaArray_t d_pctArray;
+        //cudaMallocArray(&d_pctArray, &channelDescPct, d_pct.size());
+
+        //// Copy data from d_pct to the CUDA array
+        //cudaMemcpyToArray(d_pctArray, 0, 0, d_pct.data().get(),
+        //    d_pct.size() * sizeof(float4), cudaMemcpyDeviceToDevice);
+
+        //// Set up resource description
+        //cudaResourceDesc resDescPct = {};
+        //resDescPct.resType = cudaResourceTypeArray;
+        //resDescPct.res.array.array = d_pctArray;
+
+        //// Set up texture description
+        //cudaTextureDesc texDescPct = {};
+        //texDescPct.addressMode[0] = cudaAddressModeClamp; // Clamp for out-of-bounds access
+        //texDescPct.filterMode = cudaFilterModePoint;      // No interpolation
+        //texDescPct.readMode = cudaReadModeElementType;    // Read raw elements
+        //texDescPct.normalizedCoords = 0;                 // Use unnormalized coordinates
+
+        //// Create the texture object
+        //cudaTextureObject_t texObjPct;
+        //cudaCreateTextureObject(&texObjPct, &resDescPct, &texDescPct, nullptr);
+
+    }
+
+    FlattenedKDTree::~FlattenedKDTree()
+    {
+        cudaDestroyTextureObject(texObjArray);
+        cudaDestroyTextureObject(texObjVAcc);
+        cudaDestroyTextureObject(texObjPct);
     }
 
     void FlattenedKDTree::flatten_KDTree(const KDTree::Node* root, thrust::host_vector<ArrayNode>& array, size_t& currentIndex)
@@ -155,7 +223,7 @@ namespace icp
         }
     }
 
-    __device__ __host__ float distance_squared(const Point3D p1, const Point3D p2)
+    __device__ float distance_squared(const Point3D p1, const Point3D p2)
     {
         float dx = p1.x - p2.x;
         float dy = p1.y - p2.y;
@@ -163,15 +231,14 @@ namespace icp
         return dx * dx + dy * dy + dz * dz;
     }
 
-    __device__ __host__ void FlattenedKDTree::find_nearest_neighbor(const Point3D query, size_t index, float &best_dist, size_t &best_idx, int depth) const
+    __device__ void FlattenedKDTree::find_nearest_neighbor(const Point3D query, size_t index, float& best_dist, size_t& best_idx, int depth) const
     {
-#ifdef  __CUDA_ARCH__
         if (index >= d_array.size()) return;
-        const ArrayNode& node = d_array[index];
-#else
-        if (index >= h_array.size()) return;
-        const ArrayNode& node = h_array[index]; 
-#endif
+
+        // Fetch node from texture object for device code
+        //ArrayNode node = tex1Dfetch<ArrayNode>(texObjArray, index);
+        ArrayNode node = d_array[index];
+        
         if (node.is_leaf)
         {
             // Leaf node: Check all points in the leaf node
@@ -179,21 +246,21 @@ namespace icp
             size_t right = node.data.leaf.right;
             for (size_t i = left; i <= right; i++)
             {
-#ifdef __CUDA_ARCH__
-                float dist = distance_squared(query, d_pct[d_vAcc[i]]);
+                // Fetch point index from texture object and then fetch point from texture
+                int pointIdx_i = tex1Dfetch<int>(texObjVAcc, i);
+                size_t pointIdx = reinterpret_cast<uint32_t&>(pointIdx_i);
+
+                //float4 point_f4 = tex1Dfetch<float4>(texObjPct, static_cast<int>(pointIdx));
+                //Point3D point{ point_f4.x, point_f4.y, point_f4.z };
+                Point3D point = d_pct[i];
+
+                // Compute the distance and update if it's the best
+                float dist = distance_squared(query, point);
                 if (dist < best_dist)
                 {
                     best_dist = dist;
-                    best_idx = d_vAcc[i];
+                    best_idx = pointIdx;
                 }
-#else
-                float dist = distance_squared(query, h_pct[h_vAcc[i]]);
-                if (dist < best_dist)
-                {
-                    best_dist = dist;
-                    best_idx = h_vAcc[i];
-                }
-#endif
             }
         }
         else
