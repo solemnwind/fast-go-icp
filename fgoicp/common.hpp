@@ -16,6 +16,8 @@
 #include <windows.h>
 #endif
 
+#define CUDA_DEBUG 1
+
 #define M_PI    3.141592653589793f
 #define M_INF   1E+10f
 #define M_SQRT3 1.732050807568877f
@@ -24,6 +26,8 @@ using std::string;
 
 namespace icp
 {
+    void cudaCheckError(string info, bool silent);
+
     struct Rotation
     {
         float x, y, z, rr;

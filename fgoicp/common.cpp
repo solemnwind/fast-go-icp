@@ -9,6 +9,22 @@
 
 namespace icp
 {
+    void cudaCheckError(string info, bool silent = true)
+    {
+#ifdef CUDA_DEBUG
+        cudaDeviceSynchronize();
+        cudaError_t err = cudaGetLastError();
+        if (err != cudaSuccess)
+        {
+            Logger(LogLevel::Error) << info << " failed: " << cudaGetErrorString(err);
+        }
+        else if (!silent)
+        {
+            Logger(LogLevel::Debug) << info << " success.";
+        }
+#endif
+    }
+
     Config::Config(const string toml_filepath)
         : trim(false), subsample(1.0f), mse_threshold(1e-5f),
           io{"", "", "", ""},

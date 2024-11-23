@@ -24,10 +24,8 @@ namespace icp
                                    << "Target points: " << nt;
 
             // Set stack size to 16 KB to avoid stack overflow in recursion
-            if (cudaError_t err = cudaDeviceSetLimit(cudaLimitStackSize, 16384); err != cudaSuccess) 
-            {
-                Logger(LogLevel::Warning) << "Error setting stack size: " << cudaGetErrorString(err);
-            }
+            cudaDeviceSetLimit(cudaLimitStackSize, 16384);
+            cudaCheckError("Set CUDA device stack size limit", false);
         };
 
         ~FastGoICP() {}
@@ -42,6 +40,7 @@ namespace icp
         PointCloud pct;  // target point cloud
         size_t ns, nt; // number of source/target points
 
+        // Registration object for ICP and error computing
         Registration registration;
 
         // Runtime variables

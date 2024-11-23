@@ -6,26 +6,9 @@
 #include <thrust/reduce.h>
 #include <queue>
 
-#define CUDA_DEBUG 1
 
 namespace icp
 {
-    void cudaCheckError(string info, bool silent = true)
-    {
-#if CUDA_DEBUG
-        cudaDeviceSynchronize();
-        cudaError_t err = cudaGetLastError();
-        if (err != cudaSuccess)
-        {
-            Logger(LogLevel::Error) << info << " failed: " << cudaGetErrorString(err);
-        }
-        else if (!silent)
-        {
-            Logger(LogLevel::Debug) << info << " success.";
-        }
-#endif
-    }
-
     __global__ void kernComputeClosetError(int N, glm::mat3 R, glm::vec3 t, const Point3D *d_pcs, const FlattenedKDTree* d_fkdt, float* d_errors)
     {
         int index = (blockIdx.x * blockDim.x) + threadIdx.x;
