@@ -65,18 +65,18 @@ namespace icp
     {
         // TODO:  Need target point cloud stats
         // Assume the the target point cloud is within AABB [-2.0, -2.0, -1.0, 2.0, 2.0, 1.0]
-        float xmin = -2.0;
-        float ymin = -2.0;
+        float xmin = -1.0;
+        float ymin = -1.0;
         float zmin = -1.0;
-        float xmax = 2.0;
-        float ymax = 2.0;
+        float xmax = 1.0;
+        float ymax = 1.0;
         float zmax = 1.0;
 
         // Initialize
         std::queue<TransNode> tcandidates;    // Consider using priority queue
         {
-            float step = 1.0f / 4.0f;
-            float span = 1.0f / 8.0f;
+            float step = 1.0f / 2.0f;
+            float span = 1.0f / 4.0f;
             for (float x = xmin + span; x < xmax; x += step)
             {
                 for (float y = ymin + span; y < ymax; y += step)

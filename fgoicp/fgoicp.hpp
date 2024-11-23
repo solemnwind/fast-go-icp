@@ -12,13 +12,13 @@ namespace icp
     public:
         FastGoICP(std::string config_path) : 
             config{config_path}, pcs(), pct(),
-            ns{load_cloud_ply(config.io.source, config.subsample, pcs)},
-            nt{load_cloud_ply(config.io.target, 1.0, pct)},
+            ns{load_cloud(config.io.source, config.subsample, pcs)},
+            nt{load_cloud(config.io.target, 1.0, pct)},
             registration{pct, nt, pcs, ns},
             max_iter(10), best_sse(M_INF), 
             best_translation(0.0f),
-            mse_threshold(1E-4f),               // init *mean* squared error threshold 
-            sse_threshold(ns* mse_threshold)    // init *sum* of squared error threshold
+            mse_threshold(config.mse_threshold), // init *mean* squared error threshold 
+            sse_threshold(ns* mse_threshold)     // init *sum* of squared error threshold
         {
             Logger(LogLevel::Info) << "Source points: " << ns << "\t"
                                    << "Target points: " << nt;
