@@ -90,30 +90,13 @@ namespace icp
         FlattenedKDTree* h_fkdt;
         FlattenedKDTree* d_fkdt;
 
-        size_t max_iter;
-        float best_error;
-        Rotation best_rotation;
-        glm::vec3 best_translation;
-
-        // MSE threshold depends on the source point cloud stats.
-        // If we normalize the source point cloud into a standard cube,
-        // The MSE threshold can be specified without considering 
-        // the point cloud stats.
-        float mse_threshold;
-        // SSE threshold is the summed error threshold,
-        // the registration is considered converged if SSE threshold is reached.
-        // If no trimming, sse_threshold = ns * mse_threshold
-        float sse_threshold;
 
     public:
         Registration(const PointCloud &pct, size_t nt, const PointCloud &pcs, size_t ns) : 
             pct(pct), pcs(pcs),                     // init point clouds data (host)
             nt(nt), ns(ns),                         // init number of points
             d_pct(pct.begin(), pct.end()),          // init target point cloud (device)
-            d_pcs(pcs.begin(), pcs.end()),          // init source point cloud (device)
-            max_iter(10), best_error(M_INF),        // 
-            mse_threshold(1E-3f),                   // init *mean* squared error threshold 
-            sse_threshold(ns * mse_threshold)       // init *sum* of squared error threshold, determines convergence
+            d_pcs(pcs.begin(), pcs.end())           // init source point cloud (device)
         {
             // Create and build the KDTree
             PointCloudAdaptor pct_adaptor(pct);
@@ -139,29 +122,8 @@ namespace icp
          * 
          * @return float: MSE error
          */
-        float run(Rotation &q, glm::vec3 &t);
+        float compute_sse_error(glm::mat3 &q, glm::vec3 &t);
 
-    private:
-        struct ResultBnBR3
-        {
-            float error;
-            glm::vec3 translation;
-        };
-
-        /**
-         * @brief Perform branch-and-bound algorithm in Rotation Space SO(3)
-         * 
-         * @return float
-         */
-        float branch_and_bound_SO3();
-
-        /**
-         * @brief Perform branch-and-bound algorithm in Translation Space R(3)
-         * 
-         * @param 
-         * @return ResultBnBR3 
-         */
-        ResultBnBR3 branch_and_bound_R3(Rotation q);
     };
 
 }

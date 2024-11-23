@@ -26,53 +26,7 @@ namespace icp
 #endif
     }
 
-    struct Correspondence
-    {
-        size_t idx_s;
-        size_t idx_t;
-        float dist_squared;
-        Point3D ps_transformed;
-    };
-
-    __global__ void kernFindNearestNeighbor(int N, glm::mat3 R, glm::vec3 t, const Point3D* dev_pcs, const FlattenedKDTree* d_fkdt, Correspondence* dev_corrs)
-    {
-        int index = (blockIdx.x * blockDim.x) + threadIdx.x;
-        if (index >= N) { return; }
-
-        Point3D query_point = R * dev_pcs[index] + t;
-
-        size_t nearest_index = 0;
-
-        float distance_squared = M_INF;
-        d_fkdt->find_nearest_neighbor(query_point, distance_squared, nearest_index);
-
-        dev_corrs[index].dist_squared = distance_squared;
-        dev_corrs[index].idx_s = index;
-        dev_corrs[index].idx_t = nearest_index;
-        dev_corrs[index].ps_transformed = query_point;
-    }
-
-    __global__ void kernSetRegistrationMatrices(int N, Rotation q, glm::vec3 t, const Point3D* dev_pcs, const Point3D* dev_pct, const Correspondence* dev_corrs, float* dev_mat_pcs, float* dev_mat_pct)
-    {
-        int index = (blockIdx.x * blockDim.x) + threadIdx.x;
-        if (index >= N) { return; }
-
-        Correspondence corr = dev_corrs[index];
-        Point3D pt = dev_pct[corr.idx_t];
-        Point3D ps = corr.ps_transformed;
-
-        size_t mat_idx = index * 3;
-
-        dev_mat_pct[mat_idx] = pt.x;
-        dev_mat_pct[mat_idx + 1] = pt.y;
-        dev_mat_pct[mat_idx + 2] = pt.z;
-
-        dev_mat_pcs[mat_idx] = ps.x;
-        dev_mat_pcs[mat_idx + 1] = ps.y;
-        dev_mat_pcs[mat_idx + 2] = ps.z;
-    }
-
-    __global__ void kernComputeRegistrationError(int N, glm::mat3 R, glm::vec3 t, const Point3D *d_pcs, const FlattenedKDTree* d_fkdt, float* d_errors)
+    __global__ void kernComputeClosetError(int N, glm::mat3 R, glm::vec3 t, const Point3D *d_pcs, const FlattenedKDTree* d_fkdt, float* d_errors)
     {
         int index = (blockIdx.x * blockDim.x) + threadIdx.x;
         if (index >= N) { return; }
@@ -87,7 +41,7 @@ namespace icp
         d_errors[index] = distance_squared;
     }
     
-    float Registration::run(Rotation &q, glm::vec3 &t) 
+    float Registration::compute_sse_error(glm::mat3 &R, glm::vec3 &t) 
     {
         float* dev_errors;
         cudaMalloc((void**)&dev_errors, sizeof(float) * ns);
@@ -95,107 +49,24 @@ namespace icp
         size_t block_size = 256;
         dim3 threads_per_block(block_size);
         dim3 blocks_per_grid((ns + block_size - 1) / block_size);
-        kernComputeRegistrationError <<<blocks_per_grid, threads_per_block>>> (
-            ns, 
-            glm::mat3(1.0f),    // Identity Rotation
-            glm::vec3(0.f),     // Identity Translation
+        kernComputeClosetError <<<blocks_per_grid, threads_per_block>>> (
+            ns, R, t,
             thrust::raw_pointer_cast(d_pcs.data()),
             d_fkdt, 
             dev_errors);
         cudaDeviceSynchronize();
         cudaCheckError("Kernel launch", false);
 
+        // Sum up the squared errors with thrust::reduce
         thrust::device_ptr<float> dev_errors_ptr(dev_errors);
-        best_error = thrust::reduce(dev_errors_ptr, dev_errors_ptr + ns, 0.0f);
+        float sse_error = thrust::reduce(dev_errors_ptr, dev_errors_ptr + ns, 0.0f, thrust::plus<float>());
         cudaCheckError("thrust::reduce", false);
-        Logger(LogLevel::Info) << "Initial Error: " << best_error;
         
         cudaFree(dev_errors);
 
-        branch_and_bound_SO3();
-
-        return 0.0f;
+        return sse_error;
     }
 
-    float Registration::branch_and_bound_SO3()
-    {
-        // Initialize Rotation Nodes
-        std::vector<std::unique_ptr<RotNode>> rcandidates;
-        {
-            constexpr float N = 8.0f;
-            constexpr float step = 2.0f / N;
-            constexpr float start = -1.0f + step;
-            float span = 1.0f / 8.0f;
-            for (float x = start; x < 1.0f; x += step)
-            {
-                for (float y = start; y < 1.0f; y += step)
-                {
-                    for (float z = start; z < 1.0f; z += step)
-                    {
-                        std::unique_ptr<RotNode> p_rnode = std::make_unique<RotNode>(x, y, z, span, M_INF, 0.0f);
-                        if (p_rnode->overlaps_SO3()) { rcandidates.push_back(std::move(p_rnode)); }
-                    }
-                }
-            }
-        }
-
-        while (true)
-        {
-            for (auto& p_rnode : rcandidates)
-            {
-                // BnB in R3 
-                ResultBnBR3 res = branch_and_bound_R3(p_rnode->q);
-                if (res.error < best_error)
-                {
-                    best_error = res.error;
-                    best_rotation = p_rnode->q;
-                    best_translation = res.translation;
-                }
-                if (res.error < sse_threshold)
-                {
-                    return res.error;
-                }
-            }
-            break;
-        }
-        return 0.0f;
-    }
-
-    Registration::ResultBnBR3 Registration::branch_and_bound_R3(Rotation q)
-    {
-        // TODO:  Need target point cloud stats
-        // Assume the the target point cloud is within AABB [-2.0, -2.0, -1.0, 2.0, 2.0, 1.0]
-        float xmin = -2.0;
-        float ymin = -2.0;
-        float zmin = -1.0;
-        float xmax = 2.0;
-        float ymax = 2.0;
-        float zmax = 1.0;
-
-        // Initialize
-        std::queue<RotNode> tcandidates;    // Consider using priority queue
-        {
-            float step = 1.0f / 4.0f;
-            float span = 1.0f / 8.0f;
-            for (float x = xmin + span; x < xmax; x += step)
-            {
-                for (float y = ymin + span; y < ymax; y += step)
-                {
-                    for (float z = zmin + span; z < zmax; z += step)
-                    {
-                        tcandidates.emplace(x, y, z, span, M_INF, 0.0f);
-                    }
-                }
-            }
-        }
-
-        while (true)
-        {
-            break;
-        }
-
-        return { 0.0f, {0.0f, 0.0f, 0.0f} };
-    }
 
     //============================================
     //            Flattened k-d tree

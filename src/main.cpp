@@ -8,8 +8,8 @@ int main(int argc, char* argv[])
         return 1;
     }
 
-    icp::PointCloudRegistration pcr(argv[1]);
-    pcr.run();
+    icp::FastGoICP fgoicp(argv[1]);
+    fgoicp.run();
 
     return 0;
 }

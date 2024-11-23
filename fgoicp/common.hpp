@@ -26,15 +26,16 @@ namespace icp
 {
     struct Rotation
     {
-        float rr, x, y, z;
+        float x, y, z, rr;
         glm::mat3 R;
 
         Rotation() : Rotation(0.0f, 0.0f, 0.0f) {}
 
         Rotation(float x, float y, float z) : 
-            x(x), y(y), z(z)
+            x(x), y(y), z(z), 
+            rr(x* x + y * y + z * z),
+            R(1.0f)
         {
-            rr = x * x + y * y + z * z;
             if (rr > 1.0f) { return; } // Not a rotation
 
             float ww = 1.0f - rr;
