@@ -122,7 +122,7 @@ namespace icp
          * 
          * @return float: MSE error
          */
-        float compute_sse_error(glm::mat3 &q, glm::vec3 &t);
+        float compute_sse_error(glm::mat3 q, glm::vec3 t) const;
 
     };
 

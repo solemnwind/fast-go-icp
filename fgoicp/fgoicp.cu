@@ -9,14 +9,16 @@ namespace icp
 {
     void FastGoICP::run()
     {
-        best_error = registration.compute_sse_error(glm::mat3(1.0f), glm::vec3(0.0f));
-        Logger(LogLevel::Info) << "Initial best error: " << best_error;
+        best_sse = registration.compute_sse_error(glm::mat3(1.0f), glm::vec3(0.0f));
+        Logger(LogLevel::Info) << "Initial best error: " << best_sse;
+
+        branch_and_bound_SO3();
     }
 
     float FastGoICP::branch_and_bound_SO3()
     {
         // Initialize Rotation Nodes
-        std::vector<std::unique_ptr<RotNode>> rcandidates;
+        std::queue<RotNode> rcandidates;
         {
             constexpr float N = 8.0f;
             constexpr float step = 2.0f / N;
@@ -28,31 +30,33 @@ namespace icp
                 {
                     for (float z = start; z < 1.0f; z += step)
                     {
-                        std::unique_ptr<RotNode> p_rnode = std::make_unique<RotNode>(x, y, z, span, M_INF, 0.0f);
-                        if (p_rnode->overlaps_SO3()) { rcandidates.push_back(std::move(p_rnode)); }
+                        RotNode rnode = RotNode(x, y, z, span, M_INF, 0.0f);
+                        if (rnode.overlaps_SO3()) { rcandidates.push(std::move(rnode)); }
                     }
                 }
             }
         }
 
-        while (true)
+        while (!rcandidates.empty())
         {
-            for (auto& p_rnode : rcandidates)
+            RotNode rnode = rcandidates.front();
+            rcandidates.pop();
+                    
+            // BnB in R3 
+            ResultBnBR3 res = branch_and_bound_R3(rnode.q);
+            if (res.error < best_sse)
             {
-                // BnB in R3 
-                ResultBnBR3 res = branch_and_bound_R3(p_rnode->q);
-                if (res.error < best_error)
-                {
-                    best_error = res.error;
-                    best_rotation = p_rnode->q;
-                    best_translation = res.translation;
-                }
-                if (res.error < sse_threshold)
-                {
-                    return res.error;
-                }
+                best_sse = res.error;
+                best_rotation = rnode.q;
+                best_translation = res.translation;
+                Logger(LogLevel::Debug) << "New best error: " << best_sse << "\n"
+                                        << "\tRotation:\n" << best_rotation.R
+                                        << "\tTranslation: " << best_translation;
             }
-            break;
+            //if (res.error < sse_threshold)
+            //{
+            //    return res.error;
+            //}
         }
         return 0.0f;
     }
@@ -69,7 +73,7 @@ namespace icp
         float zmax = 1.0;
 
         // Initialize
-        std::queue<RotNode> tcandidates;    // Consider using priority queue
+        std::queue<TransNode> tcandidates;    // Consider using priority queue
         {
             float step = 1.0f / 4.0f;
             float span = 1.0f / 8.0f;
@@ -79,17 +83,32 @@ namespace icp
                 {
                     for (float z = zmin + span; z < zmax; z += step)
                     {
-                        tcandidates.emplace(x, y, z, span, M_INF, 0.0f);
+                        TransNode tnode = TransNode(x, y, z, span, M_INF, 0.0f);
+                        tcandidates.push(std::move(tnode));
                     }
                 }
             }
         }
 
-        while (true)
+        float best_sse_ = M_INF;
+        glm::vec3 best_translation_(0.0f);
+
+        while (!tcandidates.empty())
         {
-            break;
+            //for (size_t i = 0; i < tcandidates.size(); ++i)
+            //{
+                auto tnode = tcandidates.front();
+                tcandidates.pop();
+
+                float sse = registration.compute_sse_error(q.R, tnode.t);
+                if (sse < best_sse_)
+                {
+                    best_sse_ = sse;
+                    best_translation_ = tnode.t;
+                }
+            //}
         }
 
-        return { 0.0f, {0.0f, 0.0f, 0.0f} };
+        return { best_sse_, best_translation_ };
     }
 }

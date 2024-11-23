@@ -15,9 +15,9 @@ namespace icp
             ns{load_cloud_ply(config.io.source, config.subsample, pcs)},
             nt{load_cloud_ply(config.io.target, 1.0, pct)},
             registration{pct, nt, pcs, ns},
-            max_iter(10), best_error(M_INF), 
+            max_iter(10), best_sse(M_INF), 
             best_translation(0.0f),
-            mse_threshold(1E-3f),               // init *mean* squared error threshold 
+            mse_threshold(1E-4f),               // init *mean* squared error threshold 
             sse_threshold(ns* mse_threshold)    // init *sum* of squared error threshold
         {
             Logger(LogLevel::Info) << "Source points: " << ns << "\t"
@@ -45,7 +45,7 @@ namespace icp
 
         // Runtime variables
         size_t max_iter;
-        float best_error;
+        float best_sse;
         Rotation best_rotation;
         glm::vec3 best_translation;
 

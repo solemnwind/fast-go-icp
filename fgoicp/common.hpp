@@ -16,7 +16,7 @@
 #include <windows.h>
 #endif
 
-#define CUDA_DEBUG 1
+#define CUDA_DEBUG 0
 
 #define M_PI    3.141592653589793f
 #define M_INF   1E+10f
@@ -26,6 +26,7 @@ using std::string;
 
 namespace icp
 {
+    void cudaCheckError(string info);
     void cudaCheckError(string info, bool silent);
 
     struct Rotation
@@ -102,6 +103,10 @@ namespace icp
         glm::vec3 t;
         float span;
         float ub, lb;
+
+        TransNode(float x, float y, float z, float span, float ub, float lb) :
+            t(x, y, z), span(span), ub(ub), lb(lb)
+        {}
     };
 
     typedef glm::vec3 Point3D;
@@ -166,6 +171,25 @@ namespace icp
         Logger& operator<<(const T& msg) 
         {
             buffer_ << msg; // Stream the message into the buffer
+            return *this;
+        }
+
+        // Overload << for glm::vec3
+        Logger& operator<<(const glm::vec3& vec)
+        {
+            buffer_ << std::fixed << std::setprecision(6);
+            buffer_ << vec.x << "\t" << vec.y << "\t" << vec.z;
+            return *this;
+        }
+
+        // Overload << for glm::mat3
+        Logger& operator<<(const glm::mat3& mat)
+        {
+            buffer_ << std::fixed << std::setprecision(4);
+            for (int i = 0; i < 3; ++i)
+            {
+                buffer_ << "\t" << mat[i][0] << "\t" << mat[i][1] << "\t" << mat[i][2] << "\n";
+            }
             return *this;
         }
 

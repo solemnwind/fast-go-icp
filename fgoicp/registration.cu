@@ -24,7 +24,7 @@ namespace icp
         d_errors[index] = distance_squared;
     }
     
-    float Registration::compute_sse_error(glm::mat3 &R, glm::vec3 &t) 
+    float Registration::compute_sse_error(glm::mat3 R, glm::vec3 t) const 
     {
         float* dev_errors;
         cudaMalloc((void**)&dev_errors, sizeof(float) * ns);
@@ -38,12 +38,12 @@ namespace icp
             d_fkdt, 
             dev_errors);
         cudaDeviceSynchronize();
-        cudaCheckError("Kernel launch", false);
+        cudaCheckError("Kernel launch");
 
         // Sum up the squared errors with thrust::reduce
         thrust::device_ptr<float> dev_errors_ptr(dev_errors);
         float sse_error = thrust::reduce(dev_errors_ptr, dev_errors_ptr + ns, 0.0f, thrust::plus<float>());
-        cudaCheckError("thrust::reduce", false);
+        cudaCheckError("thrust::reduce");
         
         cudaFree(dev_errors);
 

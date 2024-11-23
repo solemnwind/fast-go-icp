@@ -9,9 +9,14 @@
 
 namespace icp
 {
-    void cudaCheckError(string info, bool silent = true)
+    void cudaCheckError(string info)
+    { 
+        cudaCheckError(info, true); 
+    }
+
+    void cudaCheckError(string info, bool silent)
     {
-#ifdef CUDA_DEBUG
+#if CUDA_DEBUG
         cudaDeviceSynchronize();
         cudaError_t err = cudaGetLastError();
         if (err != cudaSuccess)
