@@ -92,7 +92,7 @@ namespace icp
         Logger(LogLevel::Info) << "Config parsed successfully";
     }
 
-    size_t load_cloud_ply(const string ply_filepath, const float subsample, PointCloud &cloud)
+    size_t load_cloud_ply(const std::string& ply_filepath, const float& subsample, std::vector<glm::vec3>& cloud)
     {
         size_t num_points = 0;
 
@@ -111,9 +111,9 @@ namespace icp
 
             try
             {
-                vertices = ply_file.request_properties_from_element("vertex", {"x", "y", "z"});
+                vertices = ply_file.request_properties_from_element("vertex", { "x", "y", "z" });
             }
-            catch (const std::exception &err)
+            catch (const std::exception& err)
             {
                 throw std::runtime_error("PLY file missing 'x', 'y', or 'z' vertex properties.");
             }
@@ -126,7 +126,7 @@ namespace icp
                 num_points = static_cast<size_t>(total_points * subsample);
                 cloud.reserve(num_points);  // Pre-allocate space for PointCloud
 
-                const float *vertex_buffer = reinterpret_cast<const float *>(vertices->buffer.get());
+                const float* vertex_buffer = reinterpret_cast<const float*>(vertices->buffer.get());
 
                 std::random_device rd;
                 std::mt19937 gen(rd());
@@ -138,8 +138,8 @@ namespace icp
                     if (dis(gen) <= subsample)
                     {
                         cloud.emplace_back(vertex_buffer[3 * i + 0],
-                                           vertex_buffer[3 * i + 1],
-                                           vertex_buffer[3 * i + 2]);
+                            vertex_buffer[3 * i + 1],
+                            vertex_buffer[3 * i + 2]);
                         ++index;
                     }
                 }
@@ -152,11 +152,92 @@ namespace icp
                 throw std::runtime_error("No vertices found in the PLY file.");
             }
         }
-        catch (const std::exception &err)
+        catch (const std::exception& err)
         {
-            throw std::runtime_error(string("Error reading PLY file: ") + err.what());
+            throw std::runtime_error(std::string("Error reading PLY file: ") + err.what());
         }
 
         return num_points;
+    }
+
+    size_t load_cloud_txt(const std::string& txt_filepath, const float& subsample, std::vector<glm::vec3>& cloud)
+    {
+        size_t num_points = 0;
+
+        try
+        {
+            std::ifstream file_stream(txt_filepath);
+            if (!file_stream.is_open())
+            {
+                throw std::runtime_error("Unable to open TXT file: " + txt_filepath);
+            }
+
+            int total_points = 0;
+            file_stream >> total_points;
+
+            if (total_points <= 0)
+            {
+                throw std::runtime_error("Invalid number of points in the TXT file: " + txt_filepath);
+            }
+
+            num_points = static_cast<size_t>(total_points * subsample);
+            cloud.reserve(num_points);  // Pre-allocate space for the point cloud
+
+            std::random_device rd;
+            std::mt19937 gen(rd());
+            std::uniform_real_distribution<float> dis(0.0, 1.0);
+
+            size_t index = 0;
+            for (int i = 0; i < total_points; ++i)
+            {
+                float x, y, z;
+                if (!(file_stream >> x >> y >> z))
+                {
+                    throw std::runtime_error("Error reading point data from TXT file: " + txt_filepath);
+                }
+
+                if (dis(gen) <= subsample && index < num_points)
+                {
+                    cloud.emplace_back(x, y, z);
+                    ++index;
+                }
+            }
+
+            // Adjust num_points if fewer points were randomly selected
+            num_points = index;
+
+            file_stream.close();
+        }
+        catch (const std::exception& err)
+        {
+            throw std::runtime_error(std::string("Error reading TXT file: ") + err.what());
+        }
+
+        return num_points;
+    }
+
+    size_t load_cloud(const std::string& filepath, const float& subsample, std::vector<glm::vec3>& cloud)
+    {
+        auto dot_pos = filepath.find_last_of('.');
+        if (dot_pos == std::string::npos)
+        {
+            throw std::runtime_error("Filepath does not have a valid extension: " + filepath);
+        }
+
+        std::string extension = filepath.substr(dot_pos + 1);
+        std::transform(extension.begin(), extension.end(), extension.begin(), ::tolower);
+
+        if (extension == "ply")
+        {
+            return load_cloud_ply(filepath, subsample, cloud);
+        }
+        else if (extension == "txt")
+        {
+            return load_cloud_txt(filepath, subsample, cloud);
+        }
+        else
+        {
+            throw std::runtime_error("Unsupported file extension: " + extension);
+        }
     }
 }

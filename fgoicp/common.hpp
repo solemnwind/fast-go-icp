@@ -121,10 +121,9 @@ namespace icp
         void parse_toml(const string toml_filepath);
     };
 
-    size_t load_cloud_ply(const string ply_filepath, const float subsample, PointCloud &cloud);
-    
-    size_t load_cloud_txt(const string txt_filepath, const float subsample, PointCloud &cloud);
-
+    size_t load_cloud_ply(const std::string& ply_filepath, const float& subsample, std::vector<glm::vec3>& cloud);
+    size_t load_cloud_txt(const std::string& txt_filepath, const float& subsample, std::vector<glm::vec3>& cloud);
+    size_t load_cloud(const std::string& filepath, const float& subsample, std::vector<glm::vec3>& cloud);
 
     enum class LogLevel 
     {
