@@ -122,8 +122,8 @@ namespace icp
          * 
          * @return float: MSE error
          */
-        float compute_sse_error(glm::mat3 q, glm::vec3 t) const;
-
+        float compute_sse_error(glm::mat3 R, glm::vec3 t) const;
+        std::vector<float> compute_sse_error(std::vector<glm::mat3> Rs, std::vector<glm::vec3> ts, StreamPool& stream_pool) const;
     };
 
 }

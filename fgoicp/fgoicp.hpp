@@ -18,7 +18,8 @@ namespace icp
             max_iter(10), best_sse(M_INF), 
             best_translation(0.0f),
             mse_threshold(config.mse_threshold), // init *mean* squared error threshold 
-            sse_threshold(ns* mse_threshold)     // init *sum* of squared error threshold
+            sse_threshold(ns* mse_threshold),    // init *sum* of squared error threshold
+            stream_pool(32)
         {
             Logger(LogLevel::Info) << "Source points: " << ns << "\t"
                                    << "Target points: " << nt;
@@ -58,6 +59,9 @@ namespace icp
         // the registration is considered converged if SSE threshold is reached.
         // If no trimming, sse_threshold = ns * mse_threshold
         float sse_threshold;
+
+        // CUDA stream pool
+        StreamPool stream_pool; // Creates a pool of 32 streams
 
     private:
         struct ResultBnBR3

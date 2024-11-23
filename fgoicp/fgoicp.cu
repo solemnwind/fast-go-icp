@@ -75,8 +75,8 @@ namespace icp
         // Initialize
         std::queue<TransNode> tcandidates;    // Consider using priority queue
         {
-            float step = 1.0f / 2.0f;
-            float span = 1.0f / 4.0f;
+            float step = 1.0f / 4.0f;
+            float span = 1.0f / 8.0f;
             for (float x = xmin + span; x < xmax; x += step)
             {
                 for (float y = ymin + span; y < ymax; y += step)
@@ -95,18 +95,28 @@ namespace icp
 
         while (!tcandidates.empty())
         {
-            //for (size_t i = 0; i < tcandidates.size(); ++i)
-            //{
+            std::vector<glm::mat3> Rs;
+            std::vector<glm::vec3> ts;
+            std::vector<TransNode> tnodes;
+
+            for (int i = 0; i < 64; ++i)
+            {
+                if (tcandidates.empty()) { break; }
                 auto tnode = tcandidates.front();
                 tcandidates.pop();
+                Rs.push_back(q.R);
+                ts.push_back(tnode.t);
+                tnodes.push_back(std::move(tnode));
+            }
 
-                float sse = registration.compute_sse_error(q.R, tnode.t);
-                if (sse < best_sse_)
-                {
-                    best_sse_ = sse;
-                    best_translation_ = tnode.t;
-                }
-            //}
+            auto sses = registration.compute_sse_error(Rs, ts, stream_pool);
+            size_t index = std::distance(std::begin(sses), std::min_element(std::begin(sses), std::end(sses)));
+            if (sses[index] < best_sse_)
+            {
+                best_sse_ = sses[index];
+                best_translation_ = tnodes[index].t;
+            }
+
         }
 
         return { best_sse_, best_translation_ };

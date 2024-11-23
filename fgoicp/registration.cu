@@ -4,7 +4,7 @@
 #include <device_launch_parameters.h>
 #include <thrust/device_vector.h>
 #include <thrust/reduce.h>
-#include <queue>
+#include <thrust/system/cuda/execution_policy.h>
 
 
 namespace icp
@@ -24,18 +24,18 @@ namespace icp
         d_errors[index] = distance_squared;
     }
     
-    float Registration::compute_sse_error(glm::mat3 R, glm::vec3 t) const 
+    float Registration::compute_sse_error(glm::mat3 R, glm::vec3 t) const
     {
         float* dev_errors;
         cudaMalloc((void**)&dev_errors, sizeof(float) * ns);
 
-        size_t block_size = 256;
+        size_t block_size = 32;
         dim3 threads_per_block(block_size);
         dim3 blocks_per_grid((ns + block_size - 1) / block_size);
         kernComputeClosetError <<<blocks_per_grid, threads_per_block>>> (
             ns, R, t,
             thrust::raw_pointer_cast(d_pcs.data()),
-            d_fkdt, 
+            d_fkdt,
             dev_errors);
         cudaDeviceSynchronize();
         cudaCheckError("Kernel launch");
@@ -44,10 +44,65 @@ namespace icp
         thrust::device_ptr<float> dev_errors_ptr(dev_errors);
         float sse_error = thrust::reduce(dev_errors_ptr, dev_errors_ptr + ns, 0.0f, thrust::plus<float>());
         cudaCheckError("thrust::reduce");
-        
+
         cudaFree(dev_errors);
 
         return sse_error;
+    }
+
+    std::vector<float> Registration::compute_sse_error(std::vector<glm::mat3> Rs, std::vector<glm::vec3> ts, StreamPool& stream_pool) const
+    {
+        // Ensure the input vectors are the same size
+        assert(Rs.size() == ts.size());
+        size_t num_matrices = Rs.size();
+
+        // Allocate memory on the device for the errors for each (R, t) pair
+        float* dev_errors;
+        cudaMalloc((void**)&dev_errors, sizeof(float) * ns * num_matrices);
+
+        size_t block_size = 32;
+        dim3 threads_per_block(block_size);
+        dim3 blocks_per_grid((ns + block_size - 1) / block_size);
+
+        // Launch kernel for each (R, t) pair on separate streams
+        for (size_t i = 0; i < num_matrices; ++i) {
+            // Get the appropriate stream from the stream pool
+            cudaStream_t stream = stream_pool.getStream(i);
+
+            // Launch the kernel with each (R, t) on a different stream
+            kernComputeClosetError << <blocks_per_grid, threads_per_block, 0, stream >> > (
+                ns, Rs[i], ts[i],
+                thrust::raw_pointer_cast(d_pcs.data()),
+                d_fkdt,
+                dev_errors + i * ns);  // Offset errors for each (R, t)
+        }
+
+        // Ensure kernel execution is correctly handled (wait for all streams)
+        cudaDeviceSynchronize();  // Ensure all kernels finish before continuing
+        cudaCheckError("Kernel launch");
+
+        // Use thrust to compute the SSE error for each (R, t) pair
+        auto thrust_policy = thrust::cuda::par.on(stream_pool.getStream(0));  // Using the first stream for reduction
+        thrust::device_ptr<float> dev_errors_ptr(dev_errors);
+        std::vector<float> sse_errors(num_matrices);
+
+        // Reduce the errors for each pair
+        for (size_t i = 0; i < num_matrices; ++i) {
+            sse_errors[i] = thrust::reduce(
+                thrust_policy,
+                dev_errors_ptr + i * ns,
+                dev_errors_ptr + (i + 1) * ns,
+                0.0f,
+                thrust::plus<float>()
+            );
+        }
+
+        cudaCheckError("thrust::reduce");
+
+        // Free the device memory
+        cudaFree(dev_errors);
+
+        return sse_errors;
     }
 
 

@@ -26,9 +26,11 @@ using std::string;
 
 namespace icp
 {
-    void cudaCheckError(string info);
-    void cudaCheckError(string info, bool silent);
+    void cudaCheckError(string info, bool silent = true);
 
+    //========================================================================================
+    //                           Rotation, Translation & PointCloud
+    //========================================================================================
     struct Rotation
     {
         float x, y, z, rr;
@@ -113,6 +115,10 @@ namespace icp
 
     using PointCloud = std::vector<Point3D>;
     
+
+    //========================================================================================
+    //                                     Configuration
+    //========================================================================================
     class Config
     {
     public:
@@ -148,10 +154,52 @@ namespace icp
         void parse_toml(const string toml_filepath);
     };
 
+    //========================================================================================
+    //                                      DataLoaders
+    //========================================================================================
+
     size_t load_cloud_ply(const std::string& ply_filepath, const float& subsample, std::vector<glm::vec3>& cloud);
+
     size_t load_cloud_txt(const std::string& txt_filepath, const float& subsample, std::vector<glm::vec3>& cloud);
+
     size_t load_cloud(const std::string& filepath, const float& subsample, std::vector<glm::vec3>& cloud);
 
+
+    //========================================================================================
+    //                                    CUDA Stream Pool
+    //========================================================================================
+    class StreamPool 
+    {
+    public:
+        explicit StreamPool(size_t size) : streams(size) 
+        {
+            for (auto& stream : streams) 
+            {
+                cudaStreamCreate(&stream);
+            }
+        }
+
+        ~StreamPool() 
+        {
+            for (auto& stream : streams) 
+            {
+                cudaStreamDestroy(stream);
+            }
+        }
+
+        cudaStream_t getStream(size_t index) const 
+        {
+            return streams[index % streams.size()];
+        }
+
+    private:
+        std::vector<cudaStream_t> streams;
+    };
+
+
+    //========================================================================================
+    //                                     Fancy Logger
+    //========================================================================================
     enum class LogLevel 
     {
         Debug,

@@ -9,11 +9,6 @@
 
 namespace icp
 {
-    void cudaCheckError(string info)
-    { 
-        cudaCheckError(info, true); 
-    }
-
     void cudaCheckError(string info, bool silent)
     {
 #if CUDA_DEBUG
