@@ -4,7 +4,7 @@
 #include <device_launch_parameters.h>
 #include <thrust/device_vector.h>
 #include <thrust/reduce.h>
-#include <iostream>
+#include <queue>
 
 #define CUDA_DEBUG 1
 
@@ -89,9 +89,6 @@ namespace icp
     
     float Registration::run(Rotation &q, glm::vec3 &t) 
     {
-        // Initialize with no rotation
-        RotNode init_rnode{ {0.0f, 0.0f, 0.0f}, 1.0f, 0.0f, 0.0f };
-
         float* dev_errors;
         cudaMalloc((void**)&dev_errors, sizeof(float) * ns);
 
@@ -100,8 +97,8 @@ namespace icp
         dim3 blocks_per_grid((ns + block_size - 1) / block_size);
         kernComputeRegistrationError <<<blocks_per_grid, threads_per_block>>> (
             ns, 
-            init_rnode.q.R, 
-            glm::vec3(0.f, 0.f, 0.f), 
+            glm::mat3(1.0f),    // Identity Rotation
+            glm::vec3(0.f),     // Identity Translation
             thrust::raw_pointer_cast(d_pcs.data()),
             d_fkdt, 
             dev_errors);
@@ -115,17 +112,90 @@ namespace icp
         
         cudaFree(dev_errors);
 
-
-        best_rnode = init_rnode;
+        branch_and_bound_SO3();
 
         return 0.0f;
     }
 
-    float branch_and_bound_SO3(RotNode& rnode)
+    float Registration::branch_and_bound_SO3()
     {
+        // Initialize Rotation Nodes
+        std::vector<std::unique_ptr<RotNode>> rcandidates;
+        {
+            constexpr float N = 8.0f;
+            constexpr float step = 2.0f / N;
+            constexpr float start = -1.0f + step;
+            float span = 1.0f / 8.0f;
+            for (float x = start; x < 1.0f; x += step)
+            {
+                for (float y = start; y < 1.0f; y += step)
+                {
+                    for (float z = start; z < 1.0f; z += step)
+                    {
+                        std::unique_ptr<RotNode> p_rnode = std::make_unique<RotNode>(x, y, z, span, M_INF, 0.0f);
+                        if (p_rnode->overlaps_SO3()) { rcandidates.push_back(std::move(p_rnode)); }
+                    }
+                }
+            }
+        }
+
+        while (true)
+        {
+            for (auto& p_rnode : rcandidates)
+            {
+                // BnB in R3 
+                ResultBnBR3 res = branch_and_bound_R3(p_rnode->q);
+                if (res.error < best_error)
+                {
+                    best_error = res.error;
+                    best_rotation = p_rnode->q;
+                    best_translation = res.translation;
+                }
+                if (res.error < sse_threshold)
+                {
+                    return res.error;
+                }
+            }
+            break;
+        }
         return 0.0f;
     }
 
+    Registration::ResultBnBR3 Registration::branch_and_bound_R3(Rotation q)
+    {
+        // TODO:  Need target point cloud stats
+        // Assume the the target point cloud is within AABB [-2.0, -2.0, -1.0, 2.0, 2.0, 1.0]
+        float xmin = -2.0;
+        float ymin = -2.0;
+        float zmin = -1.0;
+        float xmax = 2.0;
+        float ymax = 2.0;
+        float zmax = 1.0;
+
+        // Initialize
+        std::queue<RotNode> tcandidates;    // Consider using priority queue
+        {
+            float step = 1.0f / 4.0f;
+            float span = 1.0f / 8.0f;
+            for (float x = xmin + span; x < xmax; x += step)
+            {
+                for (float y = ymin + span; y < ymax; y += step)
+                {
+                    for (float z = zmin + span; z < zmax; z += step)
+                    {
+                        tcandidates.emplace(x, y, z, span, M_INF, 0.0f);
+                    }
+                }
+            }
+        }
+
+        while (true)
+        {
+            break;
+        }
+
+        return { 0.0f, {0.0f, 0.0f, 0.0f} };
+    }
 
     //============================================
     //            Flattened k-d tree

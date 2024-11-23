@@ -53,6 +53,13 @@ namespace icp
         Rotation(Rotation &other) :
             rr(other.rr), x(other.x), y(other.y), z(other.z), R(other.R)
         {}
+
+        /**
+         * @brief Validate that the Rotation is in SO(3)
+         * 
+         * @return true if valid; false if not
+         */
+        bool in_SO3() const { return rr <= 1.0f; }
     };
 
     /**
@@ -61,13 +68,23 @@ namespace icp
      */
     struct RotNode
     {
-        Rotation q;  // Coordinate in the bounding box
-        float span;     // Span of the node
+        Rotation q;     // Coordinate in the bounding box
+        float span;     // half edge length of the bounding cube of a rotation node
         float ub, lb;   // upper and lower error bound of this node
 
-        bool is_valid()
+        RotNode(float x, float y, float z, float span, float ub, float lb) :
+            q(x, y, z), span(span), ub(ub), lb(lb)
+        {}
+
+        /**
+         * @brief Validate that the Rotation Node is (partially) in SO(3)
+         * 
+         * @return true if valid; false if not
+         */
+        bool overlaps_SO3() const
         {
-            return q.rr <= 1.0f;
+            // (|x|-s)^2 + (|y|-s)^2 + (|y|-s)^2 <= 1
+            return q.rr - 2 * span * (abs(q.x) + abs(q.y) + abs(q.z)) + 3 * span * span <= 1;
         }
     };
 
