@@ -114,11 +114,11 @@ namespace icp
 
         friend bool operator<(const TransNode& tnode1, const TransNode& tnode2)
         {
-            if (tnode1.lb + tnode1.ub == tnode2.lb + tnode2.ub)
+            if (tnode1.lb == tnode2.lb)
             {
                 return tnode1.span < tnode2.span;
             }
-            return tnode1.lb + tnode1.ub > tnode2.lb + tnode2.ub;
+            return tnode1.lb > tnode2.lb;
         }
     };
 
@@ -223,6 +223,7 @@ namespace icp
     {
     public:
         explicit Logger(LogLevel level) : level_(level) {}
+        Logger() : Logger(LogLevel::Debug) {}
 
         // Overload << operator for streaming
         template <typename T>

@@ -24,17 +24,12 @@ namespace icp
         d_errors[index] = distance_squared;
     }
 
-    __global__ void kernComputeBounds(int N, Rotation q, TransNode tnode, const Point3D* d_pcs, const FlattenedKDTree* d_fkdt, float* d_rot_lb_trans_ub, float* d_rot_ub_trans_ub, float* d_rot_lb_trans_lb, float* d_rot_ub_trans_lb)
+    __global__ void kernComputeBounds(int N, Rotation q, TransNode tnode, const Point3D* d_pcs, const FlattenedKDTree* d_fkdt, float* d_rot_ub_trans_ub, float* d_rot_ub_trans_lb)
     {
         int index = (blockIdx.x * blockDim.x) + threadIdx.x;
         if (index >= N) { return; }
 
         Point3D source_point = d_pcs[index];
-        float radius = source_point.x * source_point.x + 
-                       source_point.y * source_point.y + 
-                       source_point.z * source_point.z;
-        float half_angle = q.r * M_PI / 2.0f;
-        float rot_uncertain_radius = 2.0f * radius * sin(half_angle); 
         float trans_uncertain_radius = M_SQRT3 * tnode.span;
         Point3D query_point = q.R * source_point + tnode.t;
 
@@ -43,19 +38,11 @@ namespace icp
         d_fkdt->find_nearest_neighbor(query_point, distance_squared, nearest_index);
 
         d_rot_ub_trans_ub[index] = distance_squared;
-
         float distance = sqrt(distance_squared);
-        float rot_lb_trans_ub = distance - rot_uncertain_radius;
-        rot_lb_trans_ub = rot_lb_trans_ub > 0.0f ? rot_lb_trans_ub * rot_lb_trans_ub : 0.0f;
-        d_rot_lb_trans_ub[index] = rot_lb_trans_ub;
 
         float rot_ub_trans_lb = distance - trans_uncertain_radius;
         rot_ub_trans_lb = rot_ub_trans_lb > 0.0f ? rot_ub_trans_lb * rot_ub_trans_lb : 0.0f;
         d_rot_ub_trans_lb[index] = rot_ub_trans_lb;
-
-        float rob_lb_trans_lb = distance - trans_uncertain_radius - rot_uncertain_radius;
-        rob_lb_trans_lb = rob_lb_trans_lb > 0.0f ? rob_lb_trans_lb * rob_lb_trans_lb : 0.0f;
-        d_rot_lb_trans_lb[index] = rot_lb_trans_ub;
     }
     
     float Registration::compute_sse_error(glm::mat3 R, glm::vec3 t) const
@@ -87,24 +74,16 @@ namespace icp
     Registration::BoundsResult_t Registration::compute_sse_error(Rotation q, std::vector<TransNode> &tnodes, StreamPool& stream_pool) const
     {
         size_t num_transforms = tnodes.size();
-        std::vector<float> sse_rot_lb_trans_ub(num_transforms);
         std::vector<float> sse_rot_ub_trans_ub(num_transforms);
-        std::vector<float> sse_rot_lb_trans_lb(num_transforms);
         std::vector<float> sse_rot_ub_trans_lb(num_transforms);
 
         // Allocate memory on the device for the errors for each (R, t) pair
-        float* d_rot_lb_trans_ub;
         float* d_rot_ub_trans_ub;
-        float* d_rot_lb_trans_lb;
         float* d_rot_ub_trans_lb;
-        cudaMalloc((void**)&d_rot_lb_trans_ub, sizeof(float) * ns * num_transforms);
         cudaMalloc((void**)&d_rot_ub_trans_ub, sizeof(float) * ns * num_transforms);
-        cudaMalloc((void**)&d_rot_lb_trans_lb, sizeof(float) * ns * num_transforms);
         cudaMalloc((void**)&d_rot_ub_trans_lb, sizeof(float) * ns * num_transforms);
 
-        thrust::device_ptr<float> d_thrust_rot_lb_trans_ub(d_rot_lb_trans_ub);
         thrust::device_ptr<float> d_thrust_rot_ub_trans_ub(d_rot_ub_trans_ub);
-        thrust::device_ptr<float> d_thrust_rot_lb_trans_lb(d_rot_lb_trans_lb);
         thrust::device_ptr<float> d_thrust_rot_ub_trans_lb(d_rot_ub_trans_lb);
 
         // Kernel launching parameters
@@ -122,37 +101,19 @@ namespace icp
                 ns, q, tnodes[i],
                 thrust::raw_pointer_cast(d_pcs.data()),
                 d_fkdt,
-                d_rot_lb_trans_ub + i * ns,
                 d_rot_ub_trans_ub + i * ns,
-                d_rot_lb_trans_lb + i * ns,
                 d_rot_ub_trans_lb + i * ns);
         }
 
         // Reduce the lower/upper bounds for each pair
         for (size_t i = 0; i < num_transforms; ++i) {
             // Thrust reduce launching parameters
-            auto thrust_policy = thrust::cuda::par.on(stream_pool.getStream(i));  // Using the first stream for reduction
-
-            sse_rot_lb_trans_ub[i] = thrust::reduce(
-                thrust_policy,
-                d_thrust_rot_lb_trans_ub + i * ns,
-                d_thrust_rot_lb_trans_ub + (i + 1) * ns,
-                0.0f,
-                thrust::plus<float>()
-            );
+            auto thrust_policy = thrust::cuda::par.on(stream_pool.getStream(i));
 
             sse_rot_ub_trans_ub[i] = thrust::reduce(
                 thrust_policy,
                 d_thrust_rot_ub_trans_ub + i * ns,
                 d_thrust_rot_ub_trans_ub + (i + 1) * ns,
-                0.0f,
-                thrust::plus<float>()
-            );
-
-            sse_rot_lb_trans_lb[i] = thrust::reduce(
-                thrust_policy,
-                d_thrust_rot_lb_trans_lb + i * ns,
-                d_thrust_rot_lb_trans_lb + (i + 1) * ns,
                 0.0f,
                 thrust::plus<float>()
             );
@@ -169,12 +130,10 @@ namespace icp
         cudaDeviceSynchronize();
 
         // Free the device memory
-        cudaFree(d_rot_lb_trans_ub);
         cudaFree(d_rot_ub_trans_ub);
-        cudaFree(d_rot_lb_trans_lb);
         cudaFree(d_rot_ub_trans_lb);
 
-        return { sse_rot_lb_trans_lb, sse_rot_lb_trans_ub, sse_rot_ub_trans_lb, sse_rot_ub_trans_ub };
+        return { sse_rot_ub_trans_lb, sse_rot_ub_trans_ub };
     }
 
 

@@ -117,10 +117,7 @@ namespace icp
             cudaFree(d_fkdt);
         }
 
-        using BoundsResult_t = std::tuple<std::vector<float>, 
-                                          std::vector<float>,
-                                          std::vector<float>,
-                                          std::vector<float>>;
+        using BoundsResult_t = std::tuple<std::vector<float>, std::vector<float>>;
 
         /**
          * @brief Run Go-ICP registration algorithm.

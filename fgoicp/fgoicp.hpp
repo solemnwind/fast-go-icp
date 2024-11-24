@@ -64,11 +64,7 @@ namespace icp
         StreamPool stream_pool;
 
     private:
-        struct ResultBnBR3
-        {
-            float lb, ub;
-            glm::vec3 best_translation;
-        };
+        using ResultBnBR3 = std::tuple<float, glm::vec3>;
 
         /**
          * @brief Perform branch-and-bound algorithm in Rotation Space SO(3)

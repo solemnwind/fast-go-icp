@@ -14,7 +14,7 @@ visualization = "viz.ply"                   # visualization ply file, set to "" 
 
 trim = true                                 # perform trimming
 subsample = 0.1                             # subsample the source point cloud
-mse_threshold = 1e-4                        # MSE threshold for convergence
+mse_threshold = 1e-3                        # MSE threshold for convergence
 
 # Search over Rotational Space SO(3)
 [params.rotation]                           # search space in SO(3)
