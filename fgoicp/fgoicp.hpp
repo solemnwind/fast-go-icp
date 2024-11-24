@@ -61,13 +61,13 @@ namespace icp
         float sse_threshold;
 
         // CUDA stream pool
-        StreamPool stream_pool; // Creates a pool of 32 streams
+        StreamPool stream_pool;
 
     private:
         struct ResultBnBR3
         {
-            float error;
-            glm::vec3 translation;
+            float lb, ub;
+            glm::vec3 best_translation;
         };
 
         /**
@@ -83,7 +83,7 @@ namespace icp
          * @param
          * @return ResultBnBR3
          */
-        ResultBnBR3 branch_and_bound_R3(Rotation q);
+        ResultBnBR3 branch_and_bound_R3(RotNode &rnode);
     };
 }
 

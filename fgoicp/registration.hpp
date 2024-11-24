@@ -117,13 +117,18 @@ namespace icp
             cudaFree(d_fkdt);
         }
 
+        using BoundsResult_t = std::tuple<std::vector<float>, 
+                                          std::vector<float>,
+                                          std::vector<float>,
+                                          std::vector<float>>;
+
         /**
          * @brief Run Go-ICP registration algorithm.
          * 
          * @return float: MSE error
          */
         float compute_sse_error(glm::mat3 R, glm::vec3 t) const;
-        std::vector<float> compute_sse_error(std::vector<glm::mat3> Rs, std::vector<glm::vec3> ts, StreamPool& stream_pool) const;
+        BoundsResult_t compute_sse_error(Rotation q, std::vector<TransNode>& tnodes, StreamPool& stream_pool) const;
     };
 
 }

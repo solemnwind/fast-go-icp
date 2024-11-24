@@ -9,7 +9,7 @@
 
 namespace icp
 {
-    __global__ void kernComputeClosetError(int N, glm::mat3 R, glm::vec3 t, const Point3D *d_pcs, const FlattenedKDTree* d_fkdt, float* d_errors)
+    __global__ void kernComputeClosestError(int N, glm::mat3 R, glm::vec3 t, const Point3D *d_pcs, const FlattenedKDTree* d_fkdt, float* d_errors)
     {
         int index = (blockIdx.x * blockDim.x) + threadIdx.x;
         if (index >= N) { return; }
@@ -23,6 +23,40 @@ namespace icp
 
         d_errors[index] = distance_squared;
     }
+
+    __global__ void kernComputeBounds(int N, Rotation q, TransNode tnode, const Point3D* d_pcs, const FlattenedKDTree* d_fkdt, float* d_rot_lb_trans_ub, float* d_rot_ub_trans_ub, float* d_rot_lb_trans_lb, float* d_rot_ub_trans_lb)
+    {
+        int index = (blockIdx.x * blockDim.x) + threadIdx.x;
+        if (index >= N) { return; }
+
+        Point3D source_point = d_pcs[index];
+        float radius = source_point.x * source_point.x + 
+                       source_point.y * source_point.y + 
+                       source_point.z * source_point.z;
+        float half_angle = q.r * M_PI / 2.0f;
+        float rot_uncertain_radius = 2.0f * radius * sin(half_angle); 
+        float trans_uncertain_radius = M_SQRT3 * tnode.span;
+        Point3D query_point = q.R * source_point + tnode.t;
+
+        size_t nearest_index = 0;
+        float distance_squared = M_INF;
+        d_fkdt->find_nearest_neighbor(query_point, distance_squared, nearest_index);
+
+        d_rot_ub_trans_ub[index] = distance_squared;
+
+        float distance = sqrt(distance_squared);
+        float rot_lb_trans_ub = distance - rot_uncertain_radius;
+        rot_lb_trans_ub = rot_lb_trans_ub > 0.0f ? rot_lb_trans_ub * rot_lb_trans_ub : 0.0f;
+        d_rot_lb_trans_ub[index] = rot_lb_trans_ub;
+
+        float rot_ub_trans_lb = distance - trans_uncertain_radius;
+        rot_ub_trans_lb = rot_ub_trans_lb > 0.0f ? rot_ub_trans_lb * rot_ub_trans_lb : 0.0f;
+        d_rot_ub_trans_lb[index] = rot_ub_trans_lb;
+
+        float rob_lb_trans_lb = distance - trans_uncertain_radius - rot_uncertain_radius;
+        rob_lb_trans_lb = rob_lb_trans_lb > 0.0f ? rob_lb_trans_lb * rob_lb_trans_lb : 0.0f;
+        d_rot_lb_trans_lb[index] = rot_lb_trans_ub;
+    }
     
     float Registration::compute_sse_error(glm::mat3 R, glm::vec3 t) const
     {
@@ -32,7 +66,7 @@ namespace icp
         size_t block_size = 32;
         dim3 threads_per_block(block_size);
         dim3 blocks_per_grid((ns + block_size - 1) / block_size);
-        kernComputeClosetError <<<blocks_per_grid, threads_per_block>>> (
+        kernComputeClosestError <<<blocks_per_grid, threads_per_block>>> (
             ns, R, t,
             thrust::raw_pointer_cast(d_pcs.data()),
             d_fkdt,
@@ -50,59 +84,97 @@ namespace icp
         return sse_error;
     }
 
-    std::vector<float> Registration::compute_sse_error(std::vector<glm::mat3> Rs, std::vector<glm::vec3> ts, StreamPool& stream_pool) const
+    Registration::BoundsResult_t Registration::compute_sse_error(Rotation q, std::vector<TransNode> &tnodes, StreamPool& stream_pool) const
     {
-        // Ensure the input vectors are the same size
-        assert(Rs.size() == ts.size());
-        size_t num_matrices = Rs.size();
+        size_t num_transforms = tnodes.size();
+        std::vector<float> sse_rot_lb_trans_ub(num_transforms);
+        std::vector<float> sse_rot_ub_trans_ub(num_transforms);
+        std::vector<float> sse_rot_lb_trans_lb(num_transforms);
+        std::vector<float> sse_rot_ub_trans_lb(num_transforms);
 
         // Allocate memory on the device for the errors for each (R, t) pair
-        float* dev_errors;
-        cudaMalloc((void**)&dev_errors, sizeof(float) * ns * num_matrices);
+        float* d_rot_lb_trans_ub;
+        float* d_rot_ub_trans_ub;
+        float* d_rot_lb_trans_lb;
+        float* d_rot_ub_trans_lb;
+        cudaMalloc((void**)&d_rot_lb_trans_ub, sizeof(float) * ns * num_transforms);
+        cudaMalloc((void**)&d_rot_ub_trans_ub, sizeof(float) * ns * num_transforms);
+        cudaMalloc((void**)&d_rot_lb_trans_lb, sizeof(float) * ns * num_transforms);
+        cudaMalloc((void**)&d_rot_ub_trans_lb, sizeof(float) * ns * num_transforms);
 
+        thrust::device_ptr<float> d_thrust_rot_lb_trans_ub(d_rot_lb_trans_ub);
+        thrust::device_ptr<float> d_thrust_rot_ub_trans_ub(d_rot_ub_trans_ub);
+        thrust::device_ptr<float> d_thrust_rot_lb_trans_lb(d_rot_lb_trans_lb);
+        thrust::device_ptr<float> d_thrust_rot_ub_trans_lb(d_rot_ub_trans_lb);
+
+        // Kernel launching parameters
         size_t block_size = 32;
         dim3 threads_per_block(block_size);
         dim3 blocks_per_grid((ns + block_size - 1) / block_size);
 
         // Launch kernel for each (R, t) pair on separate streams
-        for (size_t i = 0; i < num_matrices; ++i) {
+        for (size_t i = 0; i < num_transforms; ++i) {
             // Get the appropriate stream from the stream pool
             cudaStream_t stream = stream_pool.getStream(i);
 
             // Launch the kernel with each (R, t) on a different stream
-            kernComputeClosetError << <blocks_per_grid, threads_per_block, 0, stream >> > (
-                ns, Rs[i], ts[i],
+            kernComputeBounds <<<blocks_per_grid, threads_per_block, 0, stream>>> (
+                ns, q, tnodes[i],
                 thrust::raw_pointer_cast(d_pcs.data()),
                 d_fkdt,
-                dev_errors + i * ns);  // Offset errors for each (R, t)
+                d_rot_lb_trans_ub + i * ns,
+                d_rot_ub_trans_ub + i * ns,
+                d_rot_lb_trans_lb + i * ns,
+                d_rot_ub_trans_lb + i * ns);
         }
 
-        // Ensure kernel execution is correctly handled (wait for all streams)
-        cudaDeviceSynchronize();  // Ensure all kernels finish before continuing
-        cudaCheckError("Kernel launch");
+        // Reduce the lower/upper bounds for each pair
+        for (size_t i = 0; i < num_transforms; ++i) {
+            // Thrust reduce launching parameters
+            auto thrust_policy = thrust::cuda::par.on(stream_pool.getStream(i));  // Using the first stream for reduction
 
-        // Use thrust to compute the SSE error for each (R, t) pair
-        auto thrust_policy = thrust::cuda::par.on(stream_pool.getStream(0));  // Using the first stream for reduction
-        thrust::device_ptr<float> dev_errors_ptr(dev_errors);
-        std::vector<float> sse_errors(num_matrices);
-
-        // Reduce the errors for each pair
-        for (size_t i = 0; i < num_matrices; ++i) {
-            sse_errors[i] = thrust::reduce(
+            sse_rot_lb_trans_ub[i] = thrust::reduce(
                 thrust_policy,
-                dev_errors_ptr + i * ns,
-                dev_errors_ptr + (i + 1) * ns,
+                d_thrust_rot_lb_trans_ub + i * ns,
+                d_thrust_rot_lb_trans_ub + (i + 1) * ns,
+                0.0f,
+                thrust::plus<float>()
+            );
+
+            sse_rot_ub_trans_ub[i] = thrust::reduce(
+                thrust_policy,
+                d_thrust_rot_ub_trans_ub + i * ns,
+                d_thrust_rot_ub_trans_ub + (i + 1) * ns,
+                0.0f,
+                thrust::plus<float>()
+            );
+
+            sse_rot_lb_trans_lb[i] = thrust::reduce(
+                thrust_policy,
+                d_thrust_rot_lb_trans_lb + i * ns,
+                d_thrust_rot_lb_trans_lb + (i + 1) * ns,
+                0.0f,
+                thrust::plus<float>()
+            );
+
+            sse_rot_ub_trans_lb[i] = thrust::reduce(
+                thrust_policy,
+                d_thrust_rot_ub_trans_lb + i * ns,
+                d_thrust_rot_ub_trans_lb + (i + 1) * ns,
                 0.0f,
                 thrust::plus<float>()
             );
         }
 
-        cudaCheckError("thrust::reduce");
+        cudaDeviceSynchronize();
 
         // Free the device memory
-        cudaFree(dev_errors);
+        cudaFree(d_rot_lb_trans_ub);
+        cudaFree(d_rot_ub_trans_ub);
+        cudaFree(d_rot_lb_trans_lb);
+        cudaFree(d_rot_ub_trans_lb);
 
-        return sse_errors;
+        return { sse_rot_lb_trans_lb, sse_rot_lb_trans_ub, sse_rot_ub_trans_lb, sse_rot_ub_trans_ub };
     }
 
 

@@ -33,19 +33,19 @@ namespace icp
     //========================================================================================
     struct Rotation
     {
-        float x, y, z, rr;
+        float x, y, z, r;
         glm::mat3 R;
 
         Rotation() : Rotation(0.0f, 0.0f, 0.0f) {}
 
         Rotation(float x, float y, float z) : 
             x(x), y(y), z(z), 
-            rr(x* x + y * y + z * z),
+            r(x * x + y * y + z * z),
             R(1.0f)
         {
-            if (rr > 1.0f) { return; } // Not a rotation
+            if (r > 1.0f) { return; } // Not a rotation
 
-            float ww = 1.0f - rr;
+            float ww = 1.0f - r;
             float w = sqrt(ww);
             float wx = w * x, xx = x * x;
             float wy = w * y, xy = x * y, yy = y * y;
@@ -56,10 +56,12 @@ namespace icp
                 2 * (xy + wz),      ww - xx + yy - zz,  2 * (yz - wx),
                 2 * (xz - wy),      2 * (yz + wx),      ww - xx - yy + zz
             );
+
+            r = sqrt(r);
         }
 
         Rotation(Rotation &other) :
-            rr(other.rr), x(other.x), y(other.y), z(other.z), R(other.R)
+            r(other.r), x(other.x), y(other.y), z(other.z), R(other.R)
         {}
 
         /**
@@ -67,7 +69,7 @@ namespace icp
          * 
          * @return true if valid; false if not
          */
-        bool in_SO3() const { return rr <= 1.0f; }
+        bool in_SO3() const { return r <= 1.0f; }
     };
 
     /**
@@ -78,10 +80,10 @@ namespace icp
     {
         Rotation q;     // Coordinate in the bounding box
         float span;     // half edge length of the bounding cube of a rotation node
-        float ub, lb;   // upper and lower error bound of this node
+        float lb, ub;   // upper and lower error bound of this node
 
-        RotNode(float x, float y, float z, float span, float ub, float lb) :
-            q(x, y, z), span(span), ub(ub), lb(lb)
+        RotNode(float x, float y, float z, float span, float lb, float ub) :
+            q(x, y, z), span(span), lb(lb), ub(ub)
         {}
 
         /**
@@ -92,7 +94,7 @@ namespace icp
         bool overlaps_SO3() const
         {
             // (|x|-s)^2 + (|y|-s)^2 + (|y|-s)^2 <= 1
-            return q.rr - 2 * span * (abs(q.x) + abs(q.y) + abs(q.z)) + 3 * span * span <= 1;
+            return q.r - 2 * span * (abs(q.x) + abs(q.y) + abs(q.z)) + 3 * span * span <= 1;
         }
     };
 
@@ -104,11 +106,20 @@ namespace icp
     {
         glm::vec3 t;
         float span;
-        float ub, lb;
+        float lb, ub;
 
-        TransNode(float x, float y, float z, float span, float ub, float lb) :
-            t(x, y, z), span(span), ub(ub), lb(lb)
+        TransNode(float x, float y, float z, float span, float lb, float ub) :
+            t(x, y, z), span(span), lb(lb), ub(ub)
         {}
+
+        friend bool operator<(const TransNode& tnode1, const TransNode& tnode2)
+        {
+            if (tnode1.lb + tnode1.ub == tnode2.lb + tnode2.ub)
+            {
+                return tnode1.span < tnode2.span;
+            }
+            return tnode1.lb + tnode1.ub > tnode2.lb + tnode2.ub;
+        }
     };
 
     typedef glm::vec3 Point3D;
