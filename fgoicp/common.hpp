@@ -247,7 +247,7 @@ namespace icp
             buffer_ << std::fixed << std::setprecision(4);
             for (int i = 0; i < 3; ++i)
             {
-                buffer_ << "\t" << mat[i][0] << "\t" << mat[i][1] << "\t" << mat[i][2] << "\n";
+                buffer_ << "\t" << mat[0][i] << "\t" << mat[1][i] << "\t" << mat[2][i] << "\n";
             }
             return *this;
         }
