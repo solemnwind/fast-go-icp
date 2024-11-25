@@ -47,7 +47,7 @@ namespace icp
         // Runtime variables
         size_t max_iter;
         float best_sse;
-        Rotation best_rotation;
+        glm::mat3 best_rotation;
         glm::vec3 best_translation;
 
         // MSE threshold depends on the source point cloud stats.

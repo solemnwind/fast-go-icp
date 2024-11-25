@@ -12,3 +12,7 @@
 - [ ] `branch`-`feature/goicp-core/texture`: move data into texture objects to improve performance
 - [x] ~~use `cudaStreamSynchronize` instead of `cudaDeviceSynchronize`~~
 - [ ] use `float4` for Points, store squared sum as well
+
+## Bug Fix
+
+- [ ] ICP not converging

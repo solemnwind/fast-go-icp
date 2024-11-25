@@ -11,8 +11,9 @@ namespace icp
 {
     void FastGoICP::run()
     {
-        best_sse = registration.compute_sse_error(glm::mat3(1.0f), glm::vec3(0.0f));
-        Logger(LogLevel::Info) << "Initial best error: " << best_sse;
+        IterativeClosestPoint3D icp3d(registration, pct, pcs, 100, sse_threshold, glm::mat3(1.0f), glm::vec3(0.0f));
+        auto [icp_sse, icp_R, icp_t] = icp3d.get_result();
+        Logger(LogLevel::Info) << "Initial best error: " << icp_sse;
 
         branch_and_bound_SO3();
         Logger(LogLevel::Info) << "Searching over...";
@@ -25,7 +26,7 @@ namespace icp
         RotNode rnode = RotNode(0.0f, 0.0f, 0.0f, 1.0f, 0.0f, this->best_sse);
         rcandidates.push(std::move(rnode));
 
-#define GROUND_TRUTH
+//#define GROUND_TRUTH
 #ifdef GROUND_TRUTH
         RotNode gt_rnode = RotNode(0.0625f, /*-1.0f / sqrt(2.0f)*/ -0.85f, 0.0625f, 0.0625f, 0.0f, M_INF);
         //RotNode gt_rnode = RotNode(0.0f, -1.0f / sqrt(2.0f), 0.0f, 0.0625f, 0.0f, M_INF);
@@ -34,7 +35,7 @@ namespace icp
         auto [clb, _] = branch_and_bound_R3(gt_rnode, false);
         Logger() << "Correct, ub: " << cub << " lb: " << clb << " t:\n\t" << t;
 
-        IterativeClosestPoint3D icp3d(registration, pct, pcs, 2000, sse_threshold, gt_rnode.q.R, t);
+        IterativeClosestPoint3D icp3d(registration, pct, pcs, 1000, sse_threshold, gt_rnode.q.R, t);
         return best_sse;
 #endif
 
@@ -75,13 +76,24 @@ namespace icp
 
                 if (ub < best_sse)
                 {
-                    // TODO: ICP here
-                    best_sse = ub;
-                    best_rotation = child_rnode.q;
-                    best_translation = best_t;
+                    IterativeClosestPoint3D icp3d(registration, pct, pcs, 100, sse_threshold, child_rnode.q.R, best_t);
+                    auto [icp_sse, icp_R, icp_t] = icp3d.get_result();
+
+                    if (icp_sse < ub)
+                    {
+                        best_sse = icp_sse;
+                        best_rotation = icp_R;
+                        best_translation = icp_t;
+                    } 
+                    else
+                    {
+                        best_sse = ub;
+                        best_rotation = child_rnode.q.R;
+                        best_translation = best_t;
+                    }
                     Logger(LogLevel::Debug) << "New best error: " << best_sse << "\n"
-                        << "\tRotation:\n" << best_rotation.R << "\n"
-                        << "\tTranslation: " << best_t;
+                        << "\tRotation:\n" << best_rotation << "\n"
+                        << "\tTranslation: " << best_translation;
                 }
 
                 auto [lb, _] = branch_and_bound_R3(child_rnode, false);

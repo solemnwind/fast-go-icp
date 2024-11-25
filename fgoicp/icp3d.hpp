@@ -14,6 +14,7 @@ namespace icp
         const size_t ns;
         glm::mat3 R;
         glm::vec3 t;
+        float sse;
         const size_t max_iter;
         const float sse_threshold;
 
@@ -29,19 +30,14 @@ namespace icp
     public:
         IterativeClosestPoint3D(const Registration& reg, const PointCloud& pct, const PointCloud& pcs, size_t max_iter, float sse_threshold, glm::mat3 R, glm::vec3 t);
 
-        ~IterativeClosestPoint3D()
-        {
-            cudaFree(d_pct_buffer);
-            cudaFree(d_pcs_buffer);
-            cudaFree(d_corrs_buffer);
-            cudaFree(d_pcs_centered_buffer);
-            cudaFree(d_corrs_centered_buffer);
-            cudaFree(d_mat_buffer);
-        }
+        ~IterativeClosestPoint3D();
+
+        using Result_t = std::tuple<float, glm::mat3, glm::vec3>;
+        Result_t get_result() const;
 
     private:
-        using RigidMotion = std::tuple<glm::mat3, glm::vec3>;
-        RigidMotion procrustes();
+        using RigidMotion_t = std::tuple<glm::mat3, glm::vec3>;
+        RigidMotion_t procrustes();
     };
 }
 

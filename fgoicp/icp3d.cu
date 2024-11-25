@@ -53,7 +53,7 @@ namespace icp
 
 
     IterativeClosestPoint3D::IterativeClosestPoint3D(const Registration &reg, const PointCloud &pct, const PointCloud &pcs, size_t max_iter, float sse_threshold, glm::mat3 R, glm::vec3 t) :
-        reg(reg), nt(pct.size()), ns(pcs.size()), R(R), t(t),
+        reg(reg), nt(pct.size()), ns(pcs.size()), R(R), t(t), sse(M_INF),
         max_iter(max_iter), sse_threshold(sse_threshold)
     {
         cudaMalloc((void**)&d_pct_buffer, sizeof(Point3D) * nt);
@@ -73,17 +73,29 @@ namespace icp
         cudaCheckError("kernRotateTranslateInplace");
 
         size_t iter = 0;
-        float sse = M_INF;
         while (iter++ < max_iter && sse > sse_threshold)
         {
-            Logger() << "Iter " << iter;
             auto [R_, t_] = procrustes();
             kernRotateTranslateInplace <<<blocks_per_grid, threads_per_block>>> (ns, R_, t_, d_pcs_buffer);
             R = R_ * R;
             t = R * t + t_;
             sse = reg.compute_sse_error(R, t);
         }
-        Logger() << "ICP SSE: " << sse << "Rotation: \n" << R << "\n\tTranslation: " << t;
+    }
+
+    IterativeClosestPoint3D::~IterativeClosestPoint3D()
+    {
+        cudaFree(d_pct_buffer);
+        cudaFree(d_pcs_buffer);
+        cudaFree(d_corrs_buffer);
+        cudaFree(d_pcs_centered_buffer);
+        cudaFree(d_corrs_centered_buffer);
+        cudaFree(d_mat_buffer);
+    }
+
+    IterativeClosestPoint3D::Result_t IterativeClosestPoint3D::get_result() const
+    {
+        return { this->sse, this->R, this->t };
     }
 
     glm::mat3 closest_orthogonal_approximation(glm::mat3 ABt)
@@ -116,7 +128,7 @@ namespace icp
                          R(0, 2), R(1, 2), R(2, 2)};
     }
 
-    IterativeClosestPoint3D::RigidMotion IterativeClosestPoint3D::procrustes()
+    IterativeClosestPoint3D::RigidMotion_t IterativeClosestPoint3D::procrustes()
     {
         constexpr size_t block_size = 256;
         const dim3 threads_per_block(block_size);
