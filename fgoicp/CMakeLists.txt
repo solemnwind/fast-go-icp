@@ -34,5 +34,19 @@ elseif(CMAKE_VERSION VERSION_LESS "3.24.0")
 else()
     set_target_properties(fgoicp PROPERTIES CUDA_ARCHITECTURES native)
 endif()
-target_compile_options(fgoicp PRIVATE "$<$<AND:$<CONFIG:Debug,RelWithDebInfo>,$<COMPILE_LANGUAGE:CUDA>>:--diag-suppress=20012;-G;-src-in-ptx>")
-target_compile_options(fgoicp PRIVATE "$<$<AND:$<CONFIG:Release>,$<COMPILE_LANGUAGE:CUDA>>:--diag-suppress=20012;-lineinfo;-src-in-ptx>")
+
+# Debug options for host code (C++)
+target_compile_options(fgoicp PRIVATE "$<$<AND:$<CONFIG:Debug>,$<COMPILE_LANGUAGE:CXX>>:-g>")
+
+# Release options for host code (C++)
+target_compile_options(fgoicp PRIVATE "$<$<AND:$<CONFIG:Release>,$<COMPILE_LANGUAGE:CXX>>:-O3>")
+
+# Debug options for CUDA code
+target_compile_options(fgoicp PRIVATE 
+    "$<$<AND:$<CONFIG:Debug>,$<COMPILE_LANGUAGE:CUDA>>:--diag-suppress=20012;-lineinfo;-src-in-ptx>"
+)
+
+# Release options for CUDA code
+target_compile_options(fgoicp PRIVATE 
+    "$<$<AND:$<CONFIG:Release>,$<COMPILE_LANGUAGE:CUDA>>:--diag-suppress=20012;-lineinfo;-src-in-ptx>"
+)
