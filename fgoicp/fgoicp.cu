@@ -5,6 +5,7 @@
 #include <thrust/sort.h>
 #include <queue>
 #include <tuple>
+#include "icp3d.hpp"
 
 namespace icp
 {
@@ -24,14 +25,16 @@ namespace icp
         RotNode rnode = RotNode(0.0f, 0.0f, 0.0f, 1.0f, 0.0f, this->best_sse);
         rcandidates.push(std::move(rnode));
 
-//#define GROUND_TRUTH
+#define GROUND_TRUTH
 #ifdef GROUND_TRUTH
-        //RotNode gt_rnode = RotNode(0.0625f, /*-1.0f / sqrt(2.0f)*/ -0.75f, 0.0625f, 0.0625f, 0.0f, M_INF);
-        RotNode gt_rnode = RotNode(0.0f, -1.0f / sqrt(2.0f), 0.0f, 0.0625f, 0.0f, M_INF);
+        RotNode gt_rnode = RotNode(0.0625f, /*-1.0f / sqrt(2.0f)*/ -0.85f, 0.0625f, 0.0625f, 0.0f, M_INF);
+        //RotNode gt_rnode = RotNode(0.0f, -1.0f / sqrt(2.0f), 0.0f, 0.0625f, 0.0f, M_INF);
         Logger() << "Ground Truth Rot:\n" << gt_rnode.q.R;
         auto [cub, t] = branch_and_bound_R3(gt_rnode, true);
         auto [clb, _] = branch_and_bound_R3(gt_rnode, false);
         Logger() << "Correct, ub: " << cub << " lb: " << clb << " t:\n\t" << t;
+
+        IterativeClosestPoint3D icp3d(registration, pct, pcs, 2000, sse_threshold, gt_rnode.q.R, t);
         return best_sse;
 #endif
 
