@@ -79,7 +79,7 @@ namespace icp
          * @param
          * @return ResultBnBR3
          */
-        ResultBnBR3 branch_and_bound_R3(RotNode &rnode);
+        ResultBnBR3 branch_and_bound_R3(RotNode &rnode, bool fix_rot);
     };
 }
 

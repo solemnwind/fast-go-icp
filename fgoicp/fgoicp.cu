@@ -20,66 +20,82 @@ namespace icp
     float FastGoICP::branch_and_bound_SO3()
     {
         // Initialize Rotation Nodes
-        std::queue<RotNode> rcandidates;
-        {
-            constexpr float N = 8.0f;
-            constexpr float step = 2.0f / N;
-            constexpr float span = 1.0f / N;
-            constexpr float start = -1.0f + span;
-            for (float x = start; x < 1.0f; x += step)
-            {
-                for (float y = start; y < 1.0f; y += step)
-                {
-                    for (float z = start; z < 1.0f; z += step)
-                    {
-                        RotNode rnode = RotNode(x, y, z, span, 0.0f, M_INF);
-                        if (rnode.overlaps_SO3() && rnode.q.in_SO3()) { rcandidates.push(std::move(rnode)); }
-                    }
-                }
-            }
-        }
+        std::priority_queue<RotNode> rcandidates;
+        RotNode rnode = RotNode(0.0f, 0.0f, 0.0f, 1.0f, 0.0f, this->best_sse);
+        rcandidates.push(std::move(rnode));
+
+//#define GROUND_TRUTH
+#ifdef GROUND_TRUTH
+        //RotNode gt_rnode = RotNode(0.0625f, /*-1.0f / sqrt(2.0f)*/ -0.75f, 0.0625f, 0.0625f, 0.0f, M_INF);
+        RotNode gt_rnode = RotNode(0.0f, -1.0f / sqrt(2.0f), 0.0f, 0.0625f, 0.0f, M_INF);
+        Logger() << "Ground Truth Rot:\n" << gt_rnode.q.R;
+        auto [cub, t] = branch_and_bound_R3(gt_rnode, true);
+        auto [clb, _] = branch_and_bound_R3(gt_rnode, false);
+        Logger() << "Correct, ub: " << cub << " lb: " << clb << " t:\n\t" << t;
+        return best_sse;
+#endif
 
         while (!rcandidates.empty())
         {
-            RotNode rnode = rcandidates.front();
+            RotNode rnode = rcandidates.top();
             rcandidates.pop();
-                    
-            // BnB in R3 
-            auto [ub, best_t] = branch_and_bound_R3(rnode);
-            if (ub < best_sse)
-            {
-                best_sse = ub;
-                best_rotation = rnode.q;
-                best_translation = best_t;
-                Logger(LogLevel::Debug) << "New best error: " << best_sse << "\n"
-                                        << "\tRotation:\n" << best_rotation.R
-                                        << "\tTranslation: " << best_t;
-            }
-            if (best_sse <= sse_threshold)
+
+            if (best_sse - rnode.lb <= sse_threshold)
             {
                 break;
             }
 
-
             // Spawn children RotNodes
+            float span = rnode.span / 2.0f;
+            for (char j = 0; j < 8; ++j)
+            {
+                if (span < 0.02f) { continue; }
+                RotNode child_rnode(
+                    rnode.q.x - span + (j >> 0 & 1) * rnode.span,
+                    rnode.q.y - span + (j >> 1 & 1) * rnode.span,
+                    rnode.q.z - span + (j >> 2 & 1) * rnode.span,
+                    span, rnode.lb, rnode.ub
+                );
 
+                if (!child_rnode.overlaps_SO3()) { continue; }
+                if (!child_rnode.q.in_SO3()) 
+                { 
+                    rcandidates.push(std::move(child_rnode)); 
+                    continue; 
+                }
+
+                Logger() << "Rotation:\t" << glm::vec3{ child_rnode.q.x, child_rnode.q.y, child_rnode.q.z }
+                    << "\tspan: " << child_rnode.span << "\tr: " << child_rnode.q.r;
+                // BnB in R3 
+                auto [ub, best_t] = branch_and_bound_R3(child_rnode, true);
+                Logger() << "ub: " << ub;
+
+                if (ub < best_sse)
+                {
+                    // TODO: ICP here
+                    best_sse = ub;
+                    best_rotation = child_rnode.q;
+                    best_translation = best_t;
+                    Logger(LogLevel::Debug) << "New best error: " << best_sse << "\n"
+                        << "\tRotation:\n" << best_rotation.R << "\n"
+                        << "\tTranslation: " << best_t;
+                }
+
+                auto [lb, _] = branch_and_bound_R3(child_rnode, false);
+                Logger() << "lb: " << lb;
+
+                if (lb >= best_sse) { continue; }
+                child_rnode.lb = lb;
+                child_rnode.ub = ub;
+
+                rcandidates.push(std::move(child_rnode));
+            }
         }
         return best_sse;
     }
 
-    FastGoICP::ResultBnBR3 FastGoICP::branch_and_bound_R3(RotNode &rnode)
+    FastGoICP::ResultBnBR3 FastGoICP::branch_and_bound_R3(RotNode &rnode, bool fix_rot)
     {
-        // TODO:  Need target point cloud stats
-        // Assume the the target point cloud is within AABB [-1.0, -1.0, -1.0, 1.0, 1.0, 1.0]
-        float xmin = -1.0;
-        float ymin = -1.0;
-        float zmin = -1.0;
-        float xmax = 1.0;
-        float ymax = 1.0;
-        float zmax = 1.0;
-
-        // Everything for Rotation Upper Bound
-
         float best_error = this->best_sse;
         glm::vec3 best_t{ 0.0f };
 
@@ -88,8 +104,8 @@ namespace icp
         // Initialize queue for TransNodes
         std::priority_queue<TransNode> tcandidates;
 
-        TransNode tnode = TransNode(0.0f, 0.0f, 0.0f, 1.0f, 0.0f, rnode.ub);
-        tcandidates.push(std::move(tnode));
+        TransNode init_tnode = TransNode(0.0f, 0.0f, 0.0f, 1.0f, 0.0f, rnode.ub);
+        tcandidates.push(std::move(init_tnode));
 
         while (!tcandidates.empty())
         {
@@ -107,10 +123,10 @@ namespace icp
                 }
             }
 
-            count += tcandidates.size();
+            count += tnodes.size();
 
             // Compute lower/upper bounds
-            auto [lb, ub] = registration.compute_sse_error(rnode.q, tnodes, stream_pool);
+            auto [lb, ub] = registration.compute_sse_error(rnode, tnodes, fix_rot, stream_pool);
 
             // *Fix rotation* to compute rotation *lower bound*
             // Get min upper bound of this batch to update best SSE
@@ -129,7 +145,7 @@ namespace icp
 
                 TransNode& tnode = tnodes[i];
                 // Stop if the span is small enough
-                if (tnode.span < 0.1f) { continue; }  // TODO: use config threshold
+                if (tnode.span < 0.2f) { continue; }  // TODO: use config threshold
 
                 float span = tnode.span / 2.0f;
                 // Spawn 8 children
@@ -147,7 +163,7 @@ namespace icp
 
         }
 
-        Logger() << count << " TransNodes searched. Inner BnB finished, best error: " << best_error;
+        Logger() << count << " TransNodes searched. Inner BnB finished";
 
         return { best_error, best_t };
     }

@@ -60,7 +60,7 @@ namespace icp
             r = sqrt(r);
         }
 
-        Rotation(Rotation &other) :
+        Rotation(const Rotation &other) :
             r(other.r), x(other.x), y(other.y), z(other.z), R(other.R)
         {}
 
@@ -85,6 +85,15 @@ namespace icp
         RotNode(float x, float y, float z, float span, float lb, float ub) :
             q(x, y, z), span(span), lb(lb), ub(ub)
         {}
+
+        friend bool operator<(const RotNode& rnode1, const RotNode& rnode2)
+        {
+            if (rnode1.lb == rnode2.lb)
+            {
+                return rnode1.span < rnode2.span;
+            }
+            return rnode1.lb > rnode2.lb;
+        }
 
         /**
          * @brief Validate that the Rotation Node is (partially) in SO(3)
@@ -245,10 +254,9 @@ namespace icp
         Logger& operator<<(const glm::mat3& mat)
         {
             buffer_ << std::fixed << std::setprecision(4);
-            for (int i = 0; i < 3; ++i)
-            {
-                buffer_ << "\t" << mat[0][i] << "\t" << mat[1][i] << "\t" << mat[2][i] << "\n";
-            }
+            buffer_ << "\t" << mat[0][0] << "\t" << mat[1][0] << "\t" << mat[2][0] << "\n";
+            buffer_ << "\t" << mat[0][1] << "\t" << mat[1][1] << "\t" << mat[2][1] << "\n";
+            buffer_ << "\t" << mat[0][2] << "\t" << mat[1][2] << "\t" << mat[2][2];
             return *this;
         }
 

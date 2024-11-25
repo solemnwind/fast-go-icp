@@ -24,21 +24,37 @@ namespace icp
         d_errors[index] = distance_squared;
     }
 
-    __global__ void kernComputeBounds(int N, Rotation q, TransNode tnode, const Point3D* d_pcs, const FlattenedKDTree* d_fkdt, float* d_rot_ub_trans_ub, float* d_rot_ub_trans_lb)
+    __global__ void kernComputeBounds(int N, RotNode rnode, TransNode tnode, bool fix_rot, const Point3D* d_pcs, const FlattenedKDTree* d_fkdt, float* d_rot_ub_trans_ub, float* d_rot_ub_trans_lb)
     {
         int index = (blockIdx.x * blockDim.x) + threadIdx.x;
         if (index >= N) { return; }
 
         Point3D source_point = d_pcs[index];
         float trans_uncertain_radius = M_SQRT3 * tnode.span;
-        Point3D query_point = q.R * source_point + tnode.t;
+        Point3D query_point = rnode.q.R * source_point + tnode.t;
+
+        float rot_uncertain_radius;
+        if (!fix_rot)
+        {
+            float radius = source_point.x * source_point.x +
+                source_point.y * source_point.y +
+                source_point.z * source_point.z;
+            float half_angle = rnode.span * M_SQRT3 * M_PI / 2.0f;  // TODO: Need examination, since we are using quaternions
+            rot_uncertain_radius = 2.0f * radius * sin(half_angle);
+        }
 
         size_t nearest_index = 0;
         float distance_squared = M_INF;
         d_fkdt->find_nearest_neighbor(query_point, distance_squared, nearest_index);
 
-        d_rot_ub_trans_ub[index] = distance_squared;
         float distance = sqrt(distance_squared);
+        if (!fix_rot)
+        {
+            distance -= rot_uncertain_radius;
+        }
+
+        d_rot_ub_trans_ub[index] = distance > 0.0f ? distance * distance : 0.0f;
+
 
         float rot_ub_trans_lb = distance - trans_uncertain_radius;
         rot_ub_trans_lb = rot_ub_trans_lb > 0.0f ? rot_ub_trans_lb * rot_ub_trans_lb : 0.0f;
@@ -71,7 +87,7 @@ namespace icp
         return sse_error;
     }
 
-    Registration::BoundsResult_t Registration::compute_sse_error(Rotation q, std::vector<TransNode> &tnodes, StreamPool& stream_pool) const
+    Registration::BoundsResult_t Registration::compute_sse_error(RotNode &rnode, std::vector<TransNode> &tnodes, bool fix_rot, StreamPool& stream_pool) const
     {
         size_t num_transforms = tnodes.size();
         std::vector<float> sse_rot_ub_trans_ub(num_transforms);
@@ -98,7 +114,7 @@ namespace icp
 
             // Launch the kernel with each (R, t) on a different stream
             kernComputeBounds <<<blocks_per_grid, threads_per_block, 0, stream>>> (
-                ns, q, tnodes[i],
+                ns, rnode, tnodes[i], fix_rot,
                 thrust::raw_pointer_cast(d_pcs.data()),
                 d_fkdt,
                 d_rot_ub_trans_ub + i * ns,

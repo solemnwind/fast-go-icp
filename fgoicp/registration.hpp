@@ -125,7 +125,7 @@ namespace icp
          * @return float: MSE error
          */
         float compute_sse_error(glm::mat3 R, glm::vec3 t) const;
-        BoundsResult_t compute_sse_error(Rotation q, std::vector<TransNode>& tnodes, StreamPool& stream_pool) const;
+        BoundsResult_t compute_sse_error(RotNode &rnode, std::vector<TransNode>& tnodes, bool fix_rot, StreamPool& stream_pool) const;
     };
 
 }
