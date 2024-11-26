@@ -2,6 +2,7 @@ set(headers
     "common.hpp"
     "fgoicp.hpp"
     "icp3d.hpp"
+    "nnlut.hpp"
     "kdtree_adaptor.hpp"
     "registration.hpp"
     "../external/include/nanoflann.hpp"
@@ -13,6 +14,7 @@ set(sources
     "common.cpp"
     "fgoicp.cu"
     "icp3d.cu"
+    "nnlut.cu"
     "registration.cu"
     )
 
