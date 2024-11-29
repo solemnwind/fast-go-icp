@@ -56,7 +56,7 @@ namespace icp
          * @param  best_dist  shortest distance found
          * @param  best_idx   index of the nearest point in the target point cloud
          */
-        __device__ __host__ void find_nearest_neighbor(const Point3D query, float& best_dist, size_t& best_idx) const
+        __device__ void find_nearest_neighbor(const Point3D query, float& best_dist, size_t& best_idx) const
         {
             find_nearest_neighbor(query, 0, best_dist, best_idx, 0);
         }
@@ -64,7 +64,7 @@ namespace icp
     private:
         void flatten_KDTree(const KDTree::Node* root, thrust::host_vector<ArrayNode>& array, size_t& currentIndex);
 
-        __device__ __host__ void find_nearest_neighbor(const Point3D query, size_t index, float& best_dist, size_t& best_idx, int depth) const;
+        __device__ void find_nearest_neighbor(const Point3D query, size_t index, float& best_dist, size_t& best_idx, int depth) const;
     };
 
     //============================================

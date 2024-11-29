@@ -74,11 +74,8 @@ namespace icp
                     continue; 
                 }
 
-                Logger() << "Rotation:\t" << glm::vec3{ child_rnode.q.x, child_rnode.q.y, child_rnode.q.z }
-                    << "\tspan: " << child_rnode.span << "\tr: " << child_rnode.q.r;
                 // BnB in R3 
                 auto [ub, best_t] = branch_and_bound_R3(child_rnode, true);
-                Logger() << "ub: " << ub;
 
                 if (ub < best_sse)
                 {
@@ -103,7 +100,8 @@ namespace icp
                 }
 
                 auto [lb, _] = branch_and_bound_R3(child_rnode, false);
-                Logger() << "lb: " << lb;
+                Logger() << "ub: " << ub
+                         << "\tlb: " << lb;
 
                 if (lb >= best_sse) { continue; }
                 child_rnode.lb = lb;

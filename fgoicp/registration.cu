@@ -202,7 +202,7 @@ namespace icp
         }
     }
 
-    __device__ __host__ float distance_squared(const Point3D p1, const Point3D p2)
+    __device__ float distance_squared(const Point3D p1, const Point3D p2)
     {
         float dx = p1.x - p2.x;
         float dy = p1.y - p2.y;
@@ -210,15 +210,24 @@ namespace icp
         return dx * dx + dy * dy + dz * dz;
     }
 
-    __device__ __host__ void FlattenedKDTree::find_nearest_neighbor(const Point3D query, size_t index, float &best_dist, size_t &best_idx, int depth) const
+    __device__ void FlattenedKDTree::find_nearest_neighbor(const Point3D query, size_t index, float &best_dist, size_t &best_idx, int depth) const
     {
-#ifdef  __CUDA_ARCH__
         if (index >= d_array.size()) return;
         const ArrayNode& node = d_array[index];
+
+#define BRUTEFORCE
+#ifdef BRUTEFORCE
+        best_dist = M_INF;
+        for (size_t i = 0; i < d_pct.size(); ++i)
+        {
+            float dist_sq = distance_squared(query, d_pct[i]);
+            if (dist_sq < best_dist)
+            {
+                best_dist = dist_sq;
+                best_idx = i;
+            }
+        }
 #else
-        if (index >= h_array.size()) return;
-        const ArrayNode& node = h_array[index]; 
-#endif
         if (node.is_leaf)
         {
             // Leaf node: Check all points in the leaf node
@@ -226,21 +235,12 @@ namespace icp
             size_t right = node.data.leaf.right;
             for (size_t i = left; i <= right; i++)
             {
-#ifdef __CUDA_ARCH__
                 float dist = distance_squared(query, d_pct[d_vAcc[i]]);
                 if (dist < best_dist)
                 {
                     best_dist = dist;
                     best_idx = d_vAcc[i];
                 }
-#else
-                float dist = distance_squared(query, h_pct[h_vAcc[i]]);
-                if (dist < best_dist)
-                {
-                    best_dist = dist;
-                    best_idx = h_vAcc[i];
-                }
-#endif
             }
         }
         else
@@ -262,6 +262,6 @@ namespace icp
                 find_nearest_neighbor(query, farChild, best_dist, best_idx, depth + 1);
             }
         }
+#endif
     }
-
 }
