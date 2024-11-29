@@ -52,9 +52,10 @@ namespace icp
     }
 
 
-    IterativeClosestPoint3D::IterativeClosestPoint3D(const Registration &reg, const PointCloud &pct, const PointCloud &pcs, size_t max_iter, float sse_threshold, glm::mat3 R, glm::vec3 t) :
-        reg(reg), nt(pct.size()), ns(pcs.size()), R(R), t(t), sse(M_INF),
-        max_iter(max_iter), sse_threshold(sse_threshold)
+    IterativeClosestPoint3D::IterativeClosestPoint3D(const Registration& reg, const PointCloud& pct, const PointCloud& pcs, size_t max_iter, float sse_threshold, glm::mat3 R, glm::vec3 t) :
+        reg(reg), nt(pct.size()), ns(pcs.size()), R(R), t(t),
+        max_iter(max_iter), sse_threshold(sse_threshold), 
+        convergence_threshold(0.005)
     {
         cudaMalloc((void**)&d_pct_buffer, sizeof(Point3D) * nt);
         cudaMalloc((void**)&d_pcs_buffer, sizeof(Point3D) * ns);
@@ -65,22 +66,6 @@ namespace icp
 
         cudaMemcpy(d_pct_buffer, pct.data(), sizeof(Point3D) * nt, cudaMemcpyHostToDevice);
         cudaMemcpy(d_pcs_buffer, pcs.data(), sizeof(Point3D) * ns, cudaMemcpyHostToDevice);
-
-        const size_t block_size = 256;
-        const dim3 threads_per_block(block_size);
-        const dim3 blocks_per_grid((ns + block_size - 1) / block_size);
-        kernRotateTranslateInplace <<<blocks_per_grid, threads_per_block>>> (ns, R, t, d_pcs_buffer);
-        cudaCheckError("kernRotateTranslateInplace");
-
-        size_t iter = 0;
-        while (iter++ < max_iter && sse > sse_threshold)
-        {
-            auto [R_, t_] = procrustes();
-            kernRotateTranslateInplace <<<blocks_per_grid, threads_per_block>>> (ns, R_, t_, d_pcs_buffer);
-            R = R_ * R;
-            t = R * t + t_;
-            sse = reg.compute_sse_error(R, t);
-        }
     }
 
     IterativeClosestPoint3D::~IterativeClosestPoint3D()
@@ -93,9 +78,29 @@ namespace icp
         cudaFree(d_mat_buffer);
     }
 
-    IterativeClosestPoint3D::Result_t IterativeClosestPoint3D::get_result() const
+    IterativeClosestPoint3D::Result_t IterativeClosestPoint3D::run()
     {
-        return { this->sse, this->R, this->t };
+        const size_t block_size = 256;
+        const dim3 threads_per_block(block_size);
+        const dim3 blocks_per_grid((ns + block_size - 1) / block_size);
+        kernRotateTranslateInplace << <blocks_per_grid, threads_per_block >> > (ns, R, t, d_pcs_buffer);
+        cudaCheckError("kernRotateTranslateInplace");
+
+        size_t iter = 0;
+        float sse = M_INF;
+        float last_sse = 2.0f * M_INF;
+        // Stop when max_iter is reached OR sse improvement is minor
+        while (iter++ < max_iter && (last_sse - sse) > convergence_threshold * last_sse)
+        {
+            auto [R_, t_] = procrustes();
+            kernRotateTranslateInplace <<<blocks_per_grid, threads_per_block>>> (ns, R_, t_, d_pcs_buffer);
+            R = R_ * R;
+            t = R_ * t + t_;
+            last_sse = sse;
+            sse = reg.compute_sse_error(R, t);
+        }
+
+        return { sse, R, t };
     }
 
     glm::mat3 closest_orthogonal_approximation(glm::mat3 ABt)

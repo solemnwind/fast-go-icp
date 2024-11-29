@@ -14,9 +14,9 @@ namespace icp
         const size_t ns;
         glm::mat3 R;
         glm::vec3 t;
-        float sse;
         const size_t max_iter;
         const float sse_threshold;
+        const float convergence_threshold;
 
         PointCloud _pct_buffer;
         PointCloud _pcs_buffer;
@@ -33,7 +33,7 @@ namespace icp
         ~IterativeClosestPoint3D();
 
         using Result_t = std::tuple<float, glm::mat3, glm::vec3>;
-        Result_t get_result() const;
+        Result_t run();
 
     private:
         using RigidMotion_t = std::tuple<glm::mat3, glm::vec3>;

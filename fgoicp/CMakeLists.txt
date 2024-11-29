@@ -22,6 +22,9 @@ list(SORT sources)
 source_group(Headers FILES ${headers})
 source_group(Sources FILES ${sources})
 
+find_package(Eigen3 3.3 REQUIRED)
+include_directories(${EIGEN3_INCLUDE_DIR})
+
 add_library(fgoicp ${sources} ${headers})
 
 target_include_directories(fgoicp PRIVATE 

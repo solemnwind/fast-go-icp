@@ -12,7 +12,8 @@ namespace icp
     void FastGoICP::run()
     {
         IterativeClosestPoint3D icp3d(registration, pct, pcs, 100, sse_threshold, glm::mat3(1.0f), glm::vec3(0.0f));
-        auto [icp_sse, icp_R, icp_t] = icp3d.get_result();
+        auto [icp_sse, icp_R, icp_t] = icp3d.run();
+        best_sse = icp_sse;
         Logger(LogLevel::Info) << "Initial best error: " << icp_sse;
 
         branch_and_bound_SO3();
@@ -36,6 +37,11 @@ namespace icp
         Logger() << "Correct, ub: " << cub << " lb: " << clb << " t:\n\t" << t;
 
         IterativeClosestPoint3D icp3d(registration, pct, pcs, 1000, sse_threshold, gt_rnode.q.R, t);
+        auto [icp_sse, icp_R, icp_t] = icp3d.run();
+        Logger() << "ICP error: " << icp_sse
+                 << "\n\tRotation\n" << icp_R
+                 << "\n\tTranslation\t" << icp_t;
+
         return best_sse;
 #endif
 
@@ -77,7 +83,7 @@ namespace icp
                 if (ub < best_sse)
                 {
                     IterativeClosestPoint3D icp3d(registration, pct, pcs, 100, sse_threshold, child_rnode.q.R, best_t);
-                    auto [icp_sse, icp_R, icp_t] = icp3d.get_result();
+                    auto [icp_sse, icp_R, icp_t] = icp3d.run();
 
                     if (icp_sse < ub)
                     {
