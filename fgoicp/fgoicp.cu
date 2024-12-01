@@ -80,7 +80,7 @@ namespace icp
                 auto [ub, best_t] = branch_and_bound_R3(child_rnode, true);
                 Logger() << "ub: " << ub;
 
-                if (ub < best_sse)
+                if (ub < best_sse * 1.8)
                 {
                     IterativeClosestPoint3D icp3d(registration, pct, pcs, 100, sse_threshold, child_rnode.q.R, best_t);
                     auto [icp_sse, icp_R, icp_t] = icp3d.run();
@@ -119,6 +119,7 @@ namespace icp
     {
         float best_error = this->best_sse;
         glm::vec3 best_t{ 0.0f };
+        float best_ub = M_INF;
 
         size_t count = 0;
 
@@ -152,6 +153,7 @@ namespace icp
             // *Fix rotation* to compute rotation *lower bound*
             // Get min upper bound of this batch to update best SSE
             size_t idx_min = std::distance(std::begin(ub), std::min_element(std::begin(ub), std::end(ub)));
+            best_ub = best_ub < ub[idx_min] ? best_ub : ub[idx_min];
             if (ub[idx_min] < best_error)
             {
                 best_error = ub[idx_min];
@@ -186,6 +188,6 @@ namespace icp
 
         Logger() << count << " TransNodes searched. Inner BnB finished";
 
-        return { best_error, best_t };
+        return { best_ub, best_t };
     }
 }
