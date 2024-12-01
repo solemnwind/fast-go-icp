@@ -5,7 +5,9 @@
 #include <thrust/device_vector.h>
 #include <thrust/reduce.h>
 #include <thrust/system/cuda/execution_policy.h>
-
+#include <vector_types.h>
+#include <texture_types.h>
+#include <math_functions.h>
 
 namespace icp
 {
@@ -46,6 +48,41 @@ namespace icp
         size_t nearest_index = 0;
         float distance_squared = M_INF;
         d_fkdt->find_nearest_neighbor(query_point, distance_squared, nearest_index);
+
+        float distance = sqrt(distance_squared);
+        if (!fix_rot)
+        {
+            distance -= rot_uncertain_radius;
+        }
+
+        d_rot_ub_trans_ub[index] = distance > 0.0f ? distance * distance : 0.0f;
+
+
+        float rot_ub_trans_lb = distance - trans_uncertain_radius;
+        rot_ub_trans_lb = rot_ub_trans_lb > 0.0f ? rot_ub_trans_lb * rot_ub_trans_lb : 0.0f;
+        d_rot_ub_trans_lb[index] = rot_ub_trans_lb;
+    }
+
+    __global__ void kernComputeBounds(int N, RotNode rnode, TransNode tnode, bool fix_rot, const Point3D* d_pcs, const NearestNeighborLUT* d_lut, float* d_rot_ub_trans_ub, float* d_rot_ub_trans_lb)
+    {
+        int index = (blockIdx.x * blockDim.x) + threadIdx.x;
+        if (index >= N) { return; }
+
+        Point3D source_point = d_pcs[index];
+        float trans_uncertain_radius = M_SQRT3 * tnode.span;
+        Point3D query_point = rnode.q.R * source_point + tnode.t;
+
+        float rot_uncertain_radius;
+        if (!fix_rot)
+        {
+            float radius = source_point.x * source_point.x +
+                source_point.y * source_point.y +
+                source_point.z * source_point.z;
+            float half_angle = rnode.span * M_SQRT3 * M_PI / 2.0f;  // TODO: Need examination, since we are using quaternions
+            rot_uncertain_radius = 2.0f * radius * sin(half_angle);
+        }
+
+        float distance_squared = d_lut->search(float3{ query_point.x, query_point.y, query_point.z });
 
         float distance = sqrt(distance_squared);
         if (!fix_rot)
@@ -116,7 +153,7 @@ namespace icp
             kernComputeBounds <<<blocks_per_grid, threads_per_block, 0, stream>>> (
                 ns, rnode, tnodes[i], fix_rot,
                 thrust::raw_pointer_cast(d_pcs.data()),
-                d_fkdt,
+                d_nnlut,
                 d_rot_ub_trans_ub + i * ns,
                 d_rot_ub_trans_lb + i * ns);
         }
@@ -264,4 +301,126 @@ namespace icp
         }
     }
 
+    //============================================
+    //                   LUT
+    //============================================
+
+    NearestNeighborLUT::NearestNeighborLUT(size_t n) : definition(1.0f / n), texObj(0), d_cudaArray(nullptr), d_lutData(nullptr)
+    {
+        dims = make_int3(n, n, n);  // Default dimensions
+    }
+
+    NearestNeighborLUT::~NearestNeighborLUT()
+    {
+        cleanupCudaTexture();
+    }
+
+    void NearestNeighborLUT::initializeCudaTexture()
+    {
+        cudaChannelFormatDesc channelDesc = cudaCreateChannelDesc<float>();
+        cudaMalloc3DArray(&d_cudaArray, &channelDesc, make_cudaExtent(dims.x, dims.y, dims.z));
+
+        cudaResourceDesc resDesc;
+        memset(&resDesc, 0, sizeof(resDesc));
+        resDesc.resType = cudaResourceTypeArray;
+        resDesc.res.array.array = d_cudaArray;
+
+        cudaTextureDesc texDesc;
+        memset(&texDesc, 0, sizeof(texDesc));
+        texDesc.addressMode[0] = cudaAddressModeClamp;
+        texDesc.addressMode[1] = cudaAddressModeClamp;
+        texDesc.addressMode[2] = cudaAddressModeClamp;
+        texDesc.filterMode = cudaFilterModeLinear;
+        texDesc.readMode = cudaReadModeElementType;
+        texDesc.normalizedCoords = 0;
+
+        cudaCreateTextureObject(&texObj, &resDesc, &texDesc, nullptr);
+    }
+
+    void NearestNeighborLUT::cleanupCudaTexture()
+    {
+        if (texObj)
+        {
+            cudaDestroyTextureObject(texObj);
+            texObj = 0;
+        }
+        if (d_cudaArray)
+        {
+            cudaFreeArray(d_cudaArray);
+            d_cudaArray = nullptr;
+        }
+        if (d_lutData)
+        {
+            cudaFree(d_lutData);
+            d_lutData = nullptr;
+        }
+    }
+
+    __device__ __host__ inline float distance_squared(const float3& u, const float3& v)
+    {
+        float dx = u.x - v.x;
+        float dy = u.y - v.y;
+        float dz = u.z - v.z;
+        return dx * dx + dy * dy + dz * dz;
+    }
+
+    __global__ void buildLUTKernel(float* lutData, int3 dims, float definition, const float3* points, int numPoints)
+    {
+        int x = blockIdx.x * blockDim.x + threadIdx.x;
+        int y = blockIdx.y * blockDim.y + threadIdx.y;
+        int z = blockIdx.z * blockDim.z + threadIdx.z;
+
+        if (x >= dims.x || y >= dims.y || z >= dims.z) return;
+
+        float3 cellCenter = make_float3(x * definition, y * definition, z * definition);
+        float minDist = FLT_MAX;
+
+        for (int i = 0; i < numPoints; ++i)
+        {
+            float3 point = make_float3(points[i].x, points[i].y, points[i].z);
+            float dist_sq = distance_squared(cellCenter, point);
+            minDist = min(minDist, dist_sq);
+        }
+
+        int index = (z * dims.y + y) * dims.x + x;
+        lutData[index] = minDist;
+    }
+
+    void NearestNeighborLUT::build(const PointCloud& pct)
+    {
+        cleanupCudaTexture();
+        initializeCudaTexture();
+
+        int numPoints = pct.size();
+        thrust::host_vector<float3> h_points(numPoints);
+        for (int i = 0; i < numPoints; ++i)
+        {
+            h_points[i] = make_float3(pct[i].x, pct[i].y, pct[i].z);
+        }
+        thrust::device_vector<float3> d_points = h_points;
+
+        cudaMalloc(&d_lutData, dims.x * dims.y * dims.z * sizeof(float));
+
+        dim3 blockSize(8, 8, 8);
+        dim3 gridSize((dims.x + blockSize.x - 1) / blockSize.x,
+            (dims.y + blockSize.y - 1) / blockSize.y,
+            (dims.z + blockSize.z - 1) / blockSize.z);
+
+        buildLUTKernel << <gridSize, blockSize >> > (d_lutData, dims, definition, thrust::raw_pointer_cast(d_points.data()), numPoints);
+
+        cudaMemcpy3DParms copyParams = { 0 };
+        copyParams.srcPtr = make_cudaPitchedPtr(d_lutData, dims.x * sizeof(float), dims.x, dims.y);
+        copyParams.dstArray = d_cudaArray;
+        copyParams.extent = make_cudaExtent(dims.x, dims.y, dims.z);
+        copyParams.kind = cudaMemcpyDeviceToDevice;
+        cudaMemcpy3D(&copyParams);
+    }
+
+    __device__ float NearestNeighborLUT::search(const float3 query) const
+    {
+        float x = query.x / definition;
+        float y = query.y / definition;
+        float z = query.z / definition;
+        return tex3D<float>(texObj, x, y, z);
+    }
 }

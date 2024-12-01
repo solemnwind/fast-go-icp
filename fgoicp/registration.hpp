@@ -68,6 +68,32 @@ namespace icp
     };
 
     //============================================
+    //                   LUT
+    //============================================
+    class NearestNeighborLUT
+    {
+    private:
+        float definition;  // Definition of mesh size, default to 0.002: 500 * 500 * 500
+        int3 dims;
+        cudaArray* d_cudaArray;
+        float* d_lutData;
+
+    public:
+        cudaTextureObject_t texObj;
+
+        NearestNeighborLUT(size_t n = 500);  // TODO: needs fix
+        ~NearestNeighborLUT();
+
+        void build(const PointCloud& pct);
+
+        __device__ float search(const float3 query) const;
+
+    private:
+        void initializeCudaTexture();
+        void cleanupCudaTexture();
+    };
+
+    //============================================
     //                Registration
     //============================================
 
@@ -90,13 +116,16 @@ namespace icp
         FlattenedKDTree* h_fkdt;
         FlattenedKDTree* d_fkdt;
 
+        NearestNeighborLUT nnlut;
+        NearestNeighborLUT* d_nnlut;
 
     public:
         Registration(const PointCloud &pct, size_t nt, const PointCloud &pcs, size_t ns) : 
             pct(pct), pcs(pcs),                     // init point clouds data (host)
             nt(nt), ns(ns),                         // init number of points
             d_pct(pct.begin(), pct.end()),          // init target point cloud (device)
-            d_pcs(pcs.begin(), pcs.end())           // init source point cloud (device)
+            d_pcs(pcs.begin(), pcs.end()),          // init source point cloud (device)
+            nnlut(300)
         {
             // Create and build the KDTree
             PointCloudAdaptor pct_adaptor(pct);
@@ -109,6 +138,21 @@ namespace icp
             cudaMemcpy(d_fkdt, h_fkdt, sizeof(FlattenedKDTree), cudaMemcpyHostToDevice);
 
             Logger(LogLevel::Info) << "KD-tree built with " << pct.size() << " points";
+
+            nnlut.build(pct);
+
+            cudaMalloc((void**)&d_nnlut, sizeof(NearestNeighborLUT));
+            cudaMemcpy(d_nnlut, &nnlut, sizeof(NearestNeighborLUT), cudaMemcpyHostToDevice);
+
+            // ***************** Test ********************
+            //Point3D queryPoint = pcs[0];
+            //float nearestDistance = icp::searchNearestNeighborHost(nnlut, queryPoint);
+            //Logger() << "LUT query result: " << nearestDistance;
+
+            //size_t nearest_index = 0;
+            //float distance_squared = M_INF;
+            //h_fkdt->find_nearest_neighbor(queryPoint, distance_squared, nearest_index);
+            //Logger() << "FKDT query result: " << distance_squared;
         }
 
         ~Registration()
