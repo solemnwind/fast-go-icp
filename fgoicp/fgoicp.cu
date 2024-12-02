@@ -14,10 +14,14 @@ namespace icp
         IterativeClosestPoint3D icp3d(registration, pct, pcs, 100, sse_threshold, glm::mat3(1.0f), glm::vec3(0.0f));
         auto [icp_sse, icp_R, icp_t] = icp3d.run();
         best_sse = icp_sse;
-        Logger(LogLevel::Info) << "Initial best error: " << icp_sse;
+        Logger(LogLevel::Info) << "Initial ICP best error: " << icp_sse
+                               << "\n\tRotation:\n" << icp_R
+                               << "\n\tTranslation: " << icp_t;
 
         branch_and_bound_SO3();
-        Logger(LogLevel::Info) << "Searching over...";
+        Logger(LogLevel::Info) << "Searching over! Best Error: " << best_sse
+                               << "\n\tRotation:\n" << best_rotation
+                               << "\n\tTranslation: " << best_translation;
     }
 
     float FastGoICP::branch_and_bound_SO3()
@@ -166,7 +170,7 @@ namespace icp
 
                 TransNode& tnode = tnodes[i];
                 // Stop if the span is small enough
-                if (tnode.span < 0.2f) { continue; }  // TODO: use config threshold
+                if (tnode.span < 0.1f) { continue; }  // TODO: use config threshold
 
                 float span = tnode.span / 2.0f;
                 // Spawn 8 children

@@ -9,7 +9,6 @@
 
 namespace icp
 {
-    using PointCloudDev = thrust::device_vector<Point3D>;
     __device__ float brute_force_find_nearest_neighbor(const Point3D query, const Point3D* d_pct, size_t nt);
 
     //============================================
@@ -55,9 +54,9 @@ namespace icp
         // Number of source cloud points
         const size_t ns;
         // Target point cloud on device
-        const PointCloudDev d_pct;
+        const thrust::device_vector<Point3D> d_pct;
         // Source point cloud on device
-        const PointCloudDev d_pcs;
+        const thrust::device_vector<Point3D> d_pcs;
 
         NearestNeighborLUT nnlut;
         NearestNeighborLUT* d_nnlut;

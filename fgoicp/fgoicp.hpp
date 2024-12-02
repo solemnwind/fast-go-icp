@@ -34,7 +34,7 @@ namespace icp
         void run();
 
     private:
-        icp::Config config;
+        Config config;
 
         // Data
         PointCloud pcs;  // source point cloud

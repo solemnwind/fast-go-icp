@@ -25,7 +25,7 @@ add_library(fgoicp ${sources} ${headers})
 
 target_include_directories(fgoicp PRIVATE 
     ${CMAKE_CURRENT_SOURCE_DIR}
-    ${CMAKE_CURRENT_SOURCE_DIR}/../external/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/external/include
 )
 
 if(CMAKE_VERSION VERSION_LESS "3.23.0")

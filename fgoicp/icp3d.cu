@@ -83,7 +83,7 @@ namespace icp
         const size_t block_size = 256;
         const dim3 threads_per_block(block_size);
         const dim3 blocks_per_grid((ns + block_size - 1) / block_size);
-        kernRotateTranslateInplace << <blocks_per_grid, threads_per_block >> > (ns, R, t, d_pcs_buffer);
+        kernRotateTranslateInplace <<<blocks_per_grid, threads_per_block>>> (ns, R, t, d_pcs_buffer);
         cudaCheckError("kernRotateTranslateInplace");
 
         size_t iter = 0;
