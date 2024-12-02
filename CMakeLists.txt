@@ -27,7 +27,7 @@ endif(UNIX)
 
 add_subdirectory(fgoicp)
 
-include_directories(. ${CMAKE_CURRENT_SOURCE_DIR}/external/include)
+include_directories(.)
 
 # set(headers
 #     "src/testing_helpers.hpp"

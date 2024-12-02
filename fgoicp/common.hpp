@@ -16,6 +16,16 @@
 #include <windows.h>
 #endif
 
+// Avoid conflicting declaration of min/max macros in Windows headers
+#if !defined(NOMINMAX) && \
+    (defined(_WIN32) || defined(_WIN32_) || defined(WIN32) || defined(_WIN64))
+#define NOMINMAX
+#ifdef max
+#undef max
+#undef min
+#endif
+#endif
+
 #define CUDA_DEBUG 0
 
 #define M_PI    3.141592653589793f

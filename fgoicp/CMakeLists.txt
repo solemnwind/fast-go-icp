@@ -2,11 +2,7 @@ set(headers
     "common.hpp"
     "fgoicp.hpp"
     "icp3d.hpp"
-    "kdtree_adaptor.hpp"
     "registration.hpp"
-    "../external/include/nanoflann.hpp"
-    "../external/include/tinyply.h"
-    "../external/include/toml.hpp"
     )
 
 set(sources
