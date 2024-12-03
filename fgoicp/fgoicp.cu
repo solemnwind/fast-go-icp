@@ -81,22 +81,16 @@ namespace icp
                 // BnB in R3 
                 auto [ub, best_t] = branch_and_bound_R3(child_rnode, true);
 
-                if (ub < best_sse * 1.8)
+                if (ub < best_sse * 2)
                 {
                     IterativeClosestPoint3D icp3d(registration, pct, pcs, 100, sse_threshold, child_rnode.q.R, best_t);
                     auto [icp_sse, icp_R, icp_t] = icp3d.run();
 
-                    if (icp_sse < ub)
+                    if (icp_sse < best_sse)
                     {
                         best_sse = icp_sse;
                         best_rotation = icp_R;
                         best_translation = icp_t;
-                    } 
-                    else
-                    {
-                        best_sse = ub;
-                        best_rotation = child_rnode.q.R;
-                        best_translation = best_t;
                     }
                     Logger(LogLevel::Debug) << "New best error: " << best_sse << "\n"
                         << "\tRotation:\n" << best_rotation << "\n"

@@ -27,22 +27,22 @@ endif(UNIX)
 
 add_subdirectory(fgoicp)
 
-include_directories(.)
+include_directories(. ${CMAKE_CURRENT_SOURCE_DIR}/external/include)
 
-# set(headers
-#     "src/testing_helpers.hpp"
-#     )
+set(headers
+    "src/utilities.hpp"
+    )
 
 set(sources
     "src/main.cpp"
     )
 
-# list(SORT headers)
+list(SORT headers)
 list(SORT sources)
 
-# source_group(Headers FILES ${headers})
+source_group(Headers FILES ${headers})
 source_group(Sources FILES ${sources})
 
-add_executable(${CMAKE_PROJECT_NAME} ${sources})
+add_executable(${CMAKE_PROJECT_NAME} ${sources} ${headers})
 target_link_libraries(${CMAKE_PROJECT_NAME} fgoicp)
 set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT ${CMAKE_PROJECT_NAME})

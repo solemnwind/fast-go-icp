@@ -26,7 +26,7 @@ namespace icp
     public:
         cudaTextureObject_t texObj;
 
-        NearestNeighborLUT(size_t n = 500);  // TODO: needs fix
+        NearestNeighborLUT(size_t n = 500);
         ~NearestNeighborLUT();
 
         void build(const PointCloud& pct);
@@ -62,12 +62,12 @@ namespace icp
         NearestNeighborLUT* d_nnlut;
 
     public:
-        Registration(const PointCloud &pct, size_t nt, const PointCloud &pcs, size_t ns) : 
-            pct(pct), pcs(pcs),                     // init point clouds data (host)
-            nt(nt), ns(ns),                         // init number of points
-            d_pct(pct.begin(), pct.end()),          // init target point cloud (device)
-            d_pcs(pcs.begin(), pcs.end()),          // init source point cloud (device)
-            nnlut(300)
+        Registration(const PointCloud &_pct, const PointCloud &_pcs, size_t lut_resolution) : 
+            pct(_pct), pcs(_pcs),                     // init point clouds data (host)
+            nt(pct.size()), ns(pcs.size()),           // init number of points
+            d_pct(pct.begin(), pct.end()),            // init target point cloud (device)
+            d_pcs(pcs.begin(), pcs.end()),            // init source point cloud (device)
+            nnlut(lut_resolution)
         {
             nnlut.build(pct);
 

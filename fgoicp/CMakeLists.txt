@@ -25,15 +25,14 @@ add_library(fgoicp ${sources} ${headers})
 
 target_include_directories(fgoicp PRIVATE 
     ${CMAKE_CURRENT_SOURCE_DIR}
-    ${CMAKE_CURRENT_SOURCE_DIR}/external/include
 )
 
 if(CMAKE_VERSION VERSION_LESS "3.23.0")
     set_target_properties(fgoicp PROPERTIES CUDA_ARCHITECTURES OFF)
-elseif(CMAKE_VERSION VERSION_LESS "3.24.0")
-    set_target_properties(fgoicp PROPERTIES CUDA_ARCHITECTURES all-major)
+#elseif(CMAKE_VERSION VERSION_LESS "3.24.0")
+    #set_target_properties(fgoicp PROPERTIES CUDA_ARCHITECTURES all-major)
 else()
-    set_target_properties(fgoicp PROPERTIES CUDA_ARCHITECTURES native)
+    set_target_properties(fgoicp PROPERTIES CUDA_ARCHITECTURES all-major)
 endif()
 
 # Debug options for host code (C++)

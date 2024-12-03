@@ -10,32 +10,21 @@ namespace icp
     class FastGoICP
     {
     public:
-        FastGoICP(std::string config_path) : 
-            config{config_path}, pcs(), pct(),
-            ns{load_cloud(config.io.source, config.subsample, pcs)},
-            nt{load_cloud(config.io.target, 1.0, pct)},
-            registration{pct, nt, pcs, ns},
+        FastGoICP(std::vector<glm::vec3> _pct, std::vector<glm::vec3> _pcs, float _mse_threshold) : 
+            pcs(_pcs), pct(_pct), ns{pcs.size()}, nt{pct.size()},
+            registration{pct, pcs, 300},
             max_iter(10), best_sse(M_INF), 
-            best_translation(0.0f),
-            mse_threshold(config.mse_threshold), // init *mean* squared error threshold 
-            sse_threshold(ns* mse_threshold),    // init *sum* of squared error threshold
+            best_rotation(1.0f), best_translation(0.0f),
+            mse_threshold(_mse_threshold), // init *mean* squared error threshold 
+            sse_threshold(ns * mse_threshold),    // init *sum* of squared error threshold
             stream_pool(32)
-        {
-            Logger(LogLevel::Info) << "Source points: " << ns << "\t"
-                                   << "Target points: " << nt;
-
-            // Set stack size to 16 KB to avoid stack overflow in recursion
-            cudaDeviceSetLimit(cudaLimitStackSize, 16384);
-            cudaCheckError("Set CUDA device stack size limit", false);
-        };
+        {};
 
         ~FastGoICP() {}
 
         void run();
 
     private:
-        Config config;
-
         // Data
         PointCloud pcs;  // source point cloud
         PointCloud pct;  // target point cloud

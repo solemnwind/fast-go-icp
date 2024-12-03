@@ -12,21 +12,7 @@
 #include <glm/vec3.hpp>
 #include <glm/mat3x3.hpp>
 
-#if defined(_WIN32) || defined(_WIN64)
-#include <windows.h>
-#endif
-
-// Avoid conflicting declaration of min/max macros in Windows headers
-#if !defined(NOMINMAX) && \
-    (defined(_WIN32) || defined(_WIN32_) || defined(WIN32) || defined(_WIN64))
-#define NOMINMAX
-#ifdef max
-#undef max
-#undef min
-#endif
-#endif
-
-#define CUDA_DEBUG 0
+#define CUDA_DEBUG 1
 
 #define M_PI    3.141592653589793f
 #define M_INF   1E+10f
@@ -145,59 +131,10 @@ namespace icp
 
     using PointCloud = std::vector<Point3D>;
     
-
-    //========================================================================================
-    //                                     Configuration
-    //========================================================================================
-    class Config
-    {
-    public:
-        bool trim;
-        float subsample;
-        float mse_threshold;
-
-        struct IO
-        {
-            std::string target;        // target point cloud ply path
-            std::string source;        // source point cloud ply path
-            std::string output;        // output toml path
-            std::string visualization; // visualization ply path
-        } io;
-
-        struct Rotation
-        {
-            float xmin, xmax;
-            float ymin, ymax;
-            float zmin, zmax;
-        } rotation;
-
-        struct Translation
-        {
-            float xmin, xmax;
-            float ymin, ymax;
-            float zmin, zmax;
-        } translation;
-
-        Config(const string toml_filepath);
-
-    private:
-        void parse_toml(const string toml_filepath);
-    };
-
-    //========================================================================================
-    //                                      DataLoaders
-    //========================================================================================
-
-    size_t load_cloud_ply(const std::string& ply_filepath, const float& subsample, std::vector<glm::vec3>& cloud);
-
-    size_t load_cloud_txt(const std::string& txt_filepath, const float& subsample, std::vector<glm::vec3>& cloud);
-
-    size_t load_cloud(const std::string& filepath, const float& subsample, std::vector<glm::vec3>& cloud);
-
-
     //========================================================================================
     //                                    CUDA Stream Pool
     //========================================================================================
+
     class StreamPool 
     {
     public:
@@ -230,6 +167,7 @@ namespace icp
     //========================================================================================
     //                                     Fancy Logger
     //========================================================================================
+
     enum class LogLevel 
     {
         Debug,

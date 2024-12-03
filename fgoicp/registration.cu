@@ -73,7 +73,7 @@ namespace icp
             thrust::raw_pointer_cast(d_pct.data()),
             dev_errors);
         cudaDeviceSynchronize();
-        cudaCheckError("Kernel launch");
+        cudaCheckError("kernComputeClosestError");
 
         // Sum up the squared errors with thrust::reduce
         thrust::device_ptr<float> dev_errors_ptr(dev_errors);
@@ -277,7 +277,7 @@ namespace icp
             (dims.y + blockSize.y - 1) / blockSize.y,
             (dims.z + blockSize.z - 1) / blockSize.z);
 
-        buildLUTKernel << <gridSize, blockSize >> > (d_lutData, dims, definition, thrust::raw_pointer_cast(d_points.data()), numPoints);
+        buildLUTKernel <<<gridSize, blockSize>>> (d_lutData, dims, definition, thrust::raw_pointer_cast(d_points.data()), numPoints);
 
         cudaMemcpy3DParms copyParams = { 0 };
         copyParams.srcPtr = make_cudaPitchedPtr(d_lutData, dims.x * sizeof(float), dims.x, dims.y);
