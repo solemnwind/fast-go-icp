@@ -7,7 +7,7 @@ set(headers
 
 set(sources
     "common.cpp"
-    "fgoicp.cu"
+    "fgoicp.cpp"
     "icp3d.cu"
     "registration.cu"
     )
@@ -29,8 +29,6 @@ target_include_directories(fgoicp PRIVATE
 
 if(CMAKE_VERSION VERSION_LESS "3.23.0")
     set_target_properties(fgoicp PROPERTIES CUDA_ARCHITECTURES OFF)
-#elseif(CMAKE_VERSION VERSION_LESS "3.24.0")
-    #set_target_properties(fgoicp PROPERTIES CUDA_ARCHITECTURES all-major)
 else()
     set_target_properties(fgoicp PROPERTIES CUDA_ARCHITECTURES all-major)
 endif()

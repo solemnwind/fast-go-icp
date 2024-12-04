@@ -12,7 +12,7 @@
 #include <glm/vec3.hpp>
 #include <glm/mat3x3.hpp>
 
-#define CUDA_DEBUG 1
+#define CUDA_DEBUG 0
 
 #define M_PI    3.141592653589793f
 #define M_INF   1E+10f

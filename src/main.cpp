@@ -13,7 +13,7 @@ int main(int argc, char* argv[])
     Config config(argv[1]);
     
     std::vector<glm::vec3> pct, pcs;
-    load_cloud(config.io.target, 1.0, pct);
+    load_cloud(config.io.target, config.subsample * 2, pct);
     icp::Logger(icp::LogLevel::Info) << "Target point cloud loaded from " << config.io.target;
     load_cloud(config.io.source, config.subsample, pcs);
     icp::Logger(icp::LogLevel::Info) 

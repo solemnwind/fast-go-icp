@@ -7,7 +7,7 @@
 #include <thrust/system/cuda/execution_policy.h>
 #include <vector_types.h>
 #include <texture_types.h>
-#include <math_functions.h>
+#include <utility>
 
 namespace icp
 {
@@ -88,17 +88,14 @@ namespace icp
     Registration::BoundsResult_t Registration::compute_sse_error(RotNode &rnode, std::vector<TransNode> &tnodes, bool fix_rot, StreamPool& stream_pool) const
     {
         size_t num_transforms = tnodes.size();
-        std::vector<float> sse_rot_ub_trans_ub(num_transforms);
-        std::vector<float> sse_rot_ub_trans_lb(num_transforms);
+        std::vector<float> sse_upper_bounds(num_transforms);
+        std::vector<float> sse_lower_bounds(num_transforms);
 
         // Allocate memory on the device for the errors for each (R, t) pair
-        float* d_rot_ub_trans_ub;
-        float* d_rot_ub_trans_lb;
-        cudaMalloc((void**)&d_rot_ub_trans_ub, sizeof(float) * ns * num_transforms);
-        cudaMalloc((void**)&d_rot_ub_trans_lb, sizeof(float) * ns * num_transforms);
-
-        thrust::device_ptr<float> d_thrust_rot_ub_trans_ub(d_rot_ub_trans_ub);
-        thrust::device_ptr<float> d_thrust_rot_ub_trans_lb(d_rot_ub_trans_lb);
+        float* d_upper_bounds;
+        float* d_lower_bounds;
+        cudaMalloc((void**)&d_upper_bounds, sizeof(float) * ns * num_transforms);
+        cudaMalloc((void**)&d_lower_bounds, sizeof(float) * ns * num_transforms);
 
         // Kernel launching parameters
         size_t block_size = 32;
@@ -115,8 +112,8 @@ namespace icp
                 ns, rnode, tnodes[i], fix_rot,
                 thrust::raw_pointer_cast(d_pcs.data()),
                 d_nnlut,
-                d_rot_ub_trans_ub + i * ns,
-                d_rot_ub_trans_lb + i * ns);
+                d_upper_bounds + i * ns,
+                d_lower_bounds + i * ns);
         }
 
         // Reduce the lower/upper bounds for each pair
@@ -124,18 +121,18 @@ namespace icp
             // Thrust reduce launching parameters
             auto thrust_policy = thrust::cuda::par.on(stream_pool.getStream(i));
 
-            sse_rot_ub_trans_ub[i] = thrust::reduce(
+            sse_upper_bounds[i] = thrust::reduce(
                 thrust_policy,
-                d_thrust_rot_ub_trans_ub + i * ns,
-                d_thrust_rot_ub_trans_ub + (i + 1) * ns,
+                d_upper_bounds + i * ns,
+                d_upper_bounds + (i + 1) * ns,
                 0.0f,
                 thrust::plus<float>()
             );
 
-            sse_rot_ub_trans_lb[i] = thrust::reduce(
+            sse_lower_bounds[i] = thrust::reduce(
                 thrust_policy,
-                d_thrust_rot_ub_trans_lb + i * ns,
-                d_thrust_rot_ub_trans_lb + (i + 1) * ns,
+                d_lower_bounds + i * ns,
+                d_lower_bounds + (i + 1) * ns,
                 0.0f,
                 thrust::plus<float>()
             );
@@ -144,10 +141,10 @@ namespace icp
         cudaDeviceSynchronize();
 
         // Free the device memory
-        cudaFree(d_rot_ub_trans_ub);
-        cudaFree(d_rot_ub_trans_lb);
+        cudaFree(d_upper_bounds);
+        cudaFree(d_lower_bounds);
 
-        return { sse_rot_ub_trans_lb, sse_rot_ub_trans_ub };
+        return { sse_lower_bounds, sse_upper_bounds };
     }
 
     __device__ float distance_squared(const Point3D p1, const Point3D p2)
@@ -176,9 +173,23 @@ namespace icp
     //                   LUT
     //============================================
 
-    NearestNeighborLUT::NearestNeighborLUT(size_t n) : definition(1.0f / n), texObj(0), d_cudaArray(nullptr), d_lutData(nullptr)
+    NearestNeighborLUT::NearestNeighborLUT(float resolution, const std::array<std::pair<float, float>, 3> _target_bounds, const PointCloud& pc) : 
+        resolution(resolution), 
+        target_bounds(_target_bounds),
+        d_cudaArray(nullptr), 
+        d_lutData(nullptr),
+        texObj(0)
     {
-        dims = make_int3(n, n, n);  // Default dimensions
+        dims = make_int3(ceil((target_bounds[0].second - target_bounds[0].first) / resolution),
+                         ceil((target_bounds[1].second - target_bounds[1].first) / resolution),
+                         ceil((target_bounds[2].second - target_bounds[2].first) / resolution));
+        // Calculate scale factors and offsets based on target_bounds
+        scale = 1.0f / resolution;
+        offset.x = -target_bounds[0].first;
+        offset.y = -target_bounds[1].first;
+        offset.z = -target_bounds[2].first;
+
+        this->build(pc);
     }
 
     NearestNeighborLUT::~NearestNeighborLUT()
@@ -235,7 +246,7 @@ namespace icp
         return dx * dx + dy * dy + dz * dz;
     }
 
-    __global__ void buildLUTKernel(float* lutData, int3 dims, float definition, const float3* points, int numPoints)
+    __global__ void buildLUTKernel(float* lutData, int3 dims, float resolution, const float3* points, int numPoints)
     {
         int x = blockIdx.x * blockDim.x + threadIdx.x;
         int y = blockIdx.y * blockDim.y + threadIdx.y;
@@ -243,31 +254,40 @@ namespace icp
 
         if (x >= dims.x || y >= dims.y || z >= dims.z) return;
 
-        float3 cellCenter = make_float3(x * definition, y * definition, z * definition);
+        float3 cellCenter = make_float3(x * resolution, y * resolution, z * resolution);
         float minDist = FLT_MAX;
 
         for (int i = 0; i < numPoints; ++i)
         {
             float3 point = make_float3(points[i].x, points[i].y, points[i].z);
             float dist_sq = distance_squared(cellCenter, point);
-            minDist = min(minDist, dist_sq);
+            minDist = minDist < dist_sq ? minDist : dist_sq;
         }
 
         int index = (z * dims.y + y) * dims.x + x;
         lutData[index] = minDist;
     }
 
-    void NearestNeighborLUT::build(const PointCloud& pct)
+    void NearestNeighborLUT::build(const PointCloud& pc)
     {
         cleanupCudaTexture();
         initializeCudaTexture();
 
-        int numPoints = pct.size();
+        int numPoints = pc.size();
         thrust::host_vector<float3> h_points(numPoints);
+
+
+
+        // Transform points into LUT space
         for (int i = 0; i < numPoints; ++i)
         {
-            h_points[i] = make_float3(pct[i].x, pct[i].y, pct[i].z);
+            h_points[i] = make_float3(
+                (pc[i].x + offset.x),
+                (pc[i].y + offset.y),
+                (pc[i].z + offset.z)
+            );
         }
+
         thrust::device_vector<float3> d_points = h_points;
 
         cudaMalloc(&d_lutData, dims.x * dims.y * dims.z * sizeof(float));
@@ -277,7 +297,7 @@ namespace icp
             (dims.y + blockSize.y - 1) / blockSize.y,
             (dims.z + blockSize.z - 1) / blockSize.z);
 
-        buildLUTKernel <<<gridSize, blockSize>>> (d_lutData, dims, definition, thrust::raw_pointer_cast(d_points.data()), numPoints);
+        buildLUTKernel <<<gridSize, blockSize>>> (d_lutData, dims, resolution, thrust::raw_pointer_cast(d_points.data()), numPoints);
 
         cudaMemcpy3DParms copyParams = { 0 };
         copyParams.srcPtr = make_cudaPitchedPtr(d_lutData, dims.x * sizeof(float), dims.x, dims.y);
@@ -289,9 +309,11 @@ namespace icp
 
     __device__ float NearestNeighborLUT::search(const float3 query) const
     {
-        float x = query.x / definition;
-        float y = query.y / definition;
-        float z = query.z / definition;
+        // Map query point into LUT space using target_bounds
+        float x = (query.x + offset.x) * scale;
+        float y = (query.y + offset.y) * scale;
+        float z = (query.z + offset.z) * scale;
+
         return tex3D<float>(texObj, x, y, z);
     }
 }

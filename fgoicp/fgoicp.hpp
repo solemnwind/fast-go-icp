@@ -12,13 +12,18 @@ namespace icp
     public:
         FastGoICP(std::vector<glm::vec3> _pct, std::vector<glm::vec3> _pcs, float _mse_threshold) : 
             pcs(_pcs), pct(_pct), ns{pcs.size()}, nt{pct.size()},
-            registration{pct, pcs, 300},
+            pre_translation(center_point_cloud(pcs) - center_point_cloud(pct)),
+            scaling_factor(scale_point_clouds(pct, pcs)),
+            target_bounds(get_point_cloud_ranges(pct)),
+            registration{pct, pcs, target_bounds, 0.03},
             max_iter(10), best_sse(M_INF), 
             best_rotation(1.0f), best_translation(0.0f),
             mse_threshold(_mse_threshold), // init *mean* squared error threshold 
             sse_threshold(ns * mse_threshold),    // init *sum* of squared error threshold
             stream_pool(32)
-        {};
+        {
+            
+        };
 
         ~FastGoICP() {}
 
@@ -29,6 +34,11 @@ namespace icp
         PointCloud pcs;  // source point cloud
         PointCloud pct;  // target point cloud
         size_t ns, nt; // number of source/target points
+
+        // Preprocess
+        glm::vec3 pre_translation;
+        float scaling_factor;
+        std::array<std::pair<float, float>, 3> target_bounds;
 
         // Registration object for ICP and error computing
         Registration registration;
@@ -53,6 +63,10 @@ namespace icp
         StreamPool stream_pool;
 
     private:
+        glm::vec3 center_point_cloud(PointCloud& pc);
+        float scale_point_clouds(PointCloud& pct, PointCloud& pcs);
+        std::array<std::pair<float, float>, 3> get_point_cloud_ranges(PointCloud& pc);
+
         using ResultBnBR3 = std::tuple<float, glm::vec3>;
 
         /**

@@ -1,11 +1,9 @@
 #include "fgoicp.hpp"
+#include "icp3d.hpp"
 #include <iostream>
-#include <cuda.h>
-#include <cuda_runtime.h>
-#include <thrust/sort.h>
 #include <queue>
 #include <tuple>
-#include "icp3d.hpp"
+#include <omp.h>
 
 namespace icp
 {
@@ -21,7 +19,7 @@ namespace icp
         branch_and_bound_SO3();
         Logger(LogLevel::Info) << "Searching over! Best Error: " << best_sse
                                << "\n\tRotation:\n" << best_rotation
-                               << "\n\tTranslation: " << best_translation;
+            << "\n\tTranslation: " << best_translation / scaling_factor + pre_translation;
     }
 
     float FastGoICP::branch_and_bound_SO3()
@@ -30,24 +28,6 @@ namespace icp
         std::priority_queue<RotNode> rcandidates;
         RotNode rnode = RotNode(0.0f, 0.0f, 0.0f, 1.0f, 0.0f, this->best_sse);
         rcandidates.push(std::move(rnode));
-
-//#define GROUND_TRUTH
-#ifdef GROUND_TRUTH
-        RotNode gt_rnode = RotNode(0.0625f, /*-1.0f / sqrt(2.0f)*/ -0.85f, 0.0625f, 0.0625f, 0.0f, M_INF);
-        //RotNode gt_rnode = RotNode(0.0f, -1.0f / sqrt(2.0f), 0.0f, 0.0625f, 0.0f, M_INF);
-        Logger() << "Ground Truth Rot:\n" << gt_rnode.q.R;
-        auto [cub, t] = branch_and_bound_R3(gt_rnode, true);
-        auto [clb, _] = branch_and_bound_R3(gt_rnode, false);
-        Logger() << "Correct, ub: " << cub << " lb: " << clb << " t:\n\t" << t;
-
-        IterativeClosestPoint3D icp3d(registration, pct, pcs, 1000, sse_threshold, gt_rnode.q.R, t);
-        auto [icp_sse, icp_R, icp_t] = icp3d.run();
-        Logger() << "ICP error: " << icp_sse
-                 << "\n\tRotation\n" << icp_R
-                 << "\n\tTranslation\t" << icp_t;
-
-        return best_sse;
-#endif
 
         while (!rcandidates.empty())
         {
@@ -63,7 +43,7 @@ namespace icp
             float span = rnode.span / 2.0f;
             for (char j = 0; j < 8; ++j)
             {
-                if (span < 0.02f) { continue; }
+                if (span < 0.05f) { continue; }
                 RotNode child_rnode(
                     rnode.q.x - span + (j >> 0 & 1) * rnode.span,
                     rnode.q.y - span + (j >> 1 & 1) * rnode.span,
@@ -81,7 +61,7 @@ namespace icp
                 // BnB in R3 
                 auto [ub, best_t] = branch_and_bound_R3(child_rnode, true);
 
-                if (ub < best_sse * 2)
+                if (ub < best_sse * 1.5)
                 {
                     IterativeClosestPoint3D icp3d(registration, pct, pcs, 100, sse_threshold, child_rnode.q.R, best_t);
                     auto [icp_sse, icp_R, icp_t] = icp3d.run();
@@ -131,7 +111,7 @@ namespace icp
 
             if (best_error - tcandidates.top().lb < sse_threshold) { break; }
             // Get a batch
-            while (!tcandidates.empty() && tnodes.size() < 16)
+            while (!tcandidates.empty() && tnodes.size() < 32)
             {
                 auto tnode = tcandidates.top();
                 tcandidates.pop();
@@ -185,5 +165,118 @@ namespace icp
         Logger() << count << " TransNodes searched. Inner BnB finished";
 
         return { best_ub, best_t };
+    }
+
+    glm::vec3 FastGoICP::center_point_cloud(PointCloud& pc) {
+        glm::vec3 centroid(0.0f);
+
+        // Calculate centroid using OpenMP
+        #pragma omp parallel for reduction(+:centroid)
+        for (size_t i = 0; i < pc.size(); ++i) 
+        {
+            centroid += pc[i];
+        }
+        centroid /= static_cast<float>(pc.size());
+
+        // Translate points to center them around the origin
+        #pragma omp parallel for
+        for (size_t i = 0; i < pc.size(); ++i) 
+        {
+            pc[i] -= centroid;
+        }
+
+        return -centroid;
+    }
+
+    float get_scaling_factor(PointCloud& pc)
+    {
+        float max_abs = std::numeric_limits<float>::lowest();
+
+        #pragma omp parallel
+        {
+            float local_max_abs = std::numeric_limits<float>::lowest();
+
+            #pragma omp for nowait
+            for (size_t i = 0; i < pc.size(); ++i)
+            {
+                const auto& p = pc[i];
+                local_max_abs = std::max(local_max_abs, std::max(std::abs(p.x), std::max(std::abs(p.y), std::abs(p.z))));
+            }
+
+            #pragma omp critical
+            {
+                max_abs = std::max(max_abs, local_max_abs);
+            }
+        }
+
+        // Calculate scaling factor to fit within [-1, 1]
+        return 1.0f / max_abs; // Scaling factor to fit within [-1, 1]
+    }
+
+    std::array<std::pair<float, float>, 3> FastGoICP::get_point_cloud_ranges(PointCloud& pc)
+    {
+        // Initialize min and max values for x, y, z
+        std::array<std::pair<float, float>, 3> ranges = {
+            std::make_pair(std::numeric_limits<float>::max(), std::numeric_limits<float>::lowest()),
+            std::make_pair(std::numeric_limits<float>::max(), std::numeric_limits<float>::lowest()),
+            std::make_pair(std::numeric_limits<float>::max(), std::numeric_limits<float>::lowest())
+        };
+
+        #pragma omp parallel
+        {
+            // Local min and max for each thread
+            std::array<std::pair<float, float>, 3> localRanges = {
+                std::make_pair(std::numeric_limits<float>::max(), std::numeric_limits<float>::lowest()),
+                std::make_pair(std::numeric_limits<float>::max(), std::numeric_limits<float>::lowest()),
+                std::make_pair(std::numeric_limits<float>::max(), std::numeric_limits<float>::lowest())
+            };
+
+            #pragma omp for nowait
+            for (size_t i = 0; i < pc.size(); ++i)
+            {
+                const auto& point = pc[i];
+                localRanges[0].first = std::min(localRanges[0].first, point.x);
+                localRanges[0].second = std::max(localRanges[0].second, point.x);
+
+                localRanges[1].first = std::min(localRanges[1].first, point.y);
+                localRanges[1].second = std::max(localRanges[1].second, point.y);
+
+                localRanges[2].first = std::min(localRanges[2].first, point.z);
+                localRanges[2].second = std::max(localRanges[2].second, point.z);
+            }
+
+            #pragma omp critical
+            {
+                ranges[0].first = std::min(ranges[0].first, localRanges[0].first);
+                ranges[0].second = std::max(ranges[0].second, localRanges[0].second);
+
+                ranges[1].first = std::min(ranges[1].first, localRanges[1].first);
+                ranges[1].second = std::max(ranges[1].second, localRanges[1].second);
+
+                ranges[2].first = std::min(ranges[2].first, localRanges[2].first);
+                ranges[2].second = std::max(ranges[2].second, localRanges[2].second);
+            }
+        }
+
+        return ranges;
+    }
+
+
+    float FastGoICP::scale_point_clouds(PointCloud& pct, PointCloud& pcs)
+    {
+        // Find the scaling factor for pcs
+        float scaling_factor = get_scaling_factor(pcs);
+        
+        #pragma omp parallel for
+        for (size_t i = 0; i < pcs.size(); ++i) 
+        {
+            pcs[i] *= scaling_factor;
+        }
+        #pragma omp parallel for
+        for (size_t i = 0; i < pct.size(); ++i)
+        {
+            pct[i] *= scaling_factor;
+        }
+        return scaling_factor;
     }
 }

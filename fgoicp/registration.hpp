@@ -18,18 +18,22 @@ namespace icp
     class NearestNeighborLUT
     {
     private:
-        float definition;  // Definition of mesh size, default to 0.002: 500 * 500 * 500
+        float resolution;
         int3 dims;
+        const std::array<std::pair<float, float>, 3> target_bounds;
         cudaArray* d_cudaArray;
         float* d_lutData;
+
+        float scale;
+        float3 offset;
 
     public:
         cudaTextureObject_t texObj;
 
-        NearestNeighborLUT(size_t n = 500);
+        NearestNeighborLUT(float resolution, const std::array<std::pair<float, float>, 3> _target_bounds, const PointCloud& pc);
         ~NearestNeighborLUT();
 
-        void build(const PointCloud& pct);
+        void build(const PointCloud& pc);
 
         __device__ float search(const float3 query) const;
 
@@ -62,15 +66,13 @@ namespace icp
         NearestNeighborLUT* d_nnlut;
 
     public:
-        Registration(const PointCloud &_pct, const PointCloud &_pcs, size_t lut_resolution) : 
+        Registration(const PointCloud &_pct, const PointCloud &_pcs, const std::array<std::pair<float, float>, 3> _target_bounds, float lut_resolution) : 
             pct(_pct), pcs(_pcs),                     // init point clouds data (host)
             nt(pct.size()), ns(pcs.size()),           // init number of points
             d_pct(pct.begin(), pct.end()),            // init target point cloud (device)
             d_pcs(pcs.begin(), pcs.end()),            // init source point cloud (device)
-            nnlut(lut_resolution)
+            nnlut(lut_resolution, _target_bounds, pct)
         {
-            nnlut.build(pct);
-
             cudaMalloc((void**)&d_nnlut, sizeof(NearestNeighborLUT));
             cudaMemcpy(d_nnlut, &nnlut, sizeof(NearestNeighborLUT), cudaMemcpyHostToDevice);
         }
