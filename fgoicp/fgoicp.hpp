@@ -12,7 +12,8 @@ namespace icp
     public:
         FastGoICP(std::vector<glm::vec3> _pct, std::vector<glm::vec3> _pcs, float _mse_threshold) : 
             pcs(_pcs), pct(_pct), ns{pcs.size()}, nt{pct.size()},
-            pre_translation(center_point_cloud(pcs) - center_point_cloud(pct)),
+            offset_pcs(center_point_cloud(pcs)),
+            offset_pct(center_point_cloud(pct)),
             scaling_factor(scale_point_clouds(pct, pcs)),
             target_bounds(get_point_cloud_ranges(pct)),
             registration{pct, pcs, target_bounds, 0.03},
@@ -27,7 +28,21 @@ namespace icp
 
         ~FastGoICP() {}
 
-        void run();
+        using Result_t = std::tuple<glm::mat3, glm::vec3>;
+        Result_t run();
+
+        // Interfaces for visualization
+        float get_best_error() const { return best_sse; }
+
+        Result_t get_best_transform() const
+        {
+            return { best_rotation, best_translation };
+        }
+
+        Result_t get_last_transform() const
+        {
+            return { last_rotation, last_translation };
+        }
 
     private:
         // Data
@@ -36,7 +51,8 @@ namespace icp
         size_t ns, nt; // number of source/target points
 
         // Preprocess
-        glm::vec3 pre_translation;
+        glm::vec3 offset_pcs;
+        glm::vec3 offset_pct;
         float scaling_factor;
         std::array<std::pair<float, float>, 3> target_bounds;
 
@@ -61,6 +77,9 @@ namespace icp
 
         // CUDA stream pool
         StreamPool stream_pool;
+
+        glm::mat3 last_rotation{ 1.0f };
+        glm::vec3 last_translation{ 0.0f };
 
     private:
         glm::vec3 center_point_cloud(PointCloud& pc);

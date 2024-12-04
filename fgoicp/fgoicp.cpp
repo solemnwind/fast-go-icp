@@ -7,9 +7,9 @@
 
 namespace icp
 {
-    void FastGoICP::run()
+    FastGoICP::Result_t FastGoICP::run()
     {
-        IterativeClosestPoint3D icp3d(registration, pct, pcs, 100, sse_threshold, glm::mat3(1.0f), glm::vec3(0.0f));
+        IterativeClosestPoint3D icp3d(registration, pct, pcs, 100, 0.05, glm::mat3(1.0f), glm::vec3(0.0f));
         auto [icp_sse, icp_R, icp_t] = icp3d.run();
         best_sse = icp_sse;
         Logger(LogLevel::Info) << "Initial ICP best error: " << icp_sse
@@ -17,9 +17,16 @@ namespace icp
                                << "\n\tTranslation: " << icp_t;
 
         branch_and_bound_SO3();
+
+        // Refine the best tranform
+        IterativeClosestPoint3D icp3d_best(registration, pct, pcs, 100, 0.0005, best_rotation, best_translation);
+        std::tie(best_sse, best_rotation, best_translation) = icp3d_best.run();
+
         Logger(LogLevel::Info) << "Searching over! Best Error: " << best_sse
                                << "\n\tRotation:\n" << best_rotation
-            << "\n\tTranslation: " << best_translation / scaling_factor + pre_translation;
+                               << "\n\tTranslation: " << best_translation;
+
+        return { best_rotation, best_translation };
     }
 
     float FastGoICP::branch_and_bound_SO3()
@@ -61,25 +68,26 @@ namespace icp
                 // BnB in R3 
                 auto [ub, best_t] = branch_and_bound_R3(child_rnode, true);
 
+                last_rotation = child_rnode.q.R;
+                last_translation = best_t;
+
                 if (ub < best_sse * 1.5)
                 {
-                    IterativeClosestPoint3D icp3d(registration, pct, pcs, 100, sse_threshold, child_rnode.q.R, best_t);
+                    IterativeClosestPoint3D icp3d(registration, pct, pcs, 100, 0.005, child_rnode.q.R, best_t);
                     auto [icp_sse, icp_R, icp_t] = icp3d.run();
 
                     if (icp_sse < best_sse)
                     {
                         best_sse = icp_sse;
                         best_rotation = icp_R;
-                        best_translation = icp_t;
+                        best_translation = icp_t / scaling_factor + icp_R * offset_pcs - offset_pct;
                     }
                     Logger(LogLevel::Debug) << "New best error: " << best_sse << "\n"
                         << "\tRotation:\n" << best_rotation << "\n"
-                        << "\tTranslation: " << best_translation;
+                        << "\n\tTranslation: " << best_translation;
                 }
 
                 auto [lb, _] = branch_and_bound_R3(child_rnode, false);
-                Logger() << "ub: " << ub
-                         << "\tlb: " << lb;
 
                 if (lb >= best_sse) { continue; }
                 child_rnode.lb = lb;
@@ -161,8 +169,6 @@ namespace icp
             }
 
         }
-
-        Logger() << count << " TransNodes searched. Inner BnB finished";
 
         return { best_ub, best_t };
     }

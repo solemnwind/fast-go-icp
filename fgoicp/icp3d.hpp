@@ -15,7 +15,6 @@ namespace icp
         glm::mat3 R;
         glm::vec3 t;
         const size_t max_iter;
-        const float sse_threshold;
         const float convergence_threshold;
 
         PointCloud _pct_buffer;
@@ -28,7 +27,7 @@ namespace icp
         glm::mat3* d_mat_buffer;
 
     public:
-        IterativeClosestPoint3D(const Registration& reg, const PointCloud& pct, const PointCloud& pcs, size_t max_iter, float sse_threshold, glm::mat3 R, glm::vec3 t);
+        IterativeClosestPoint3D(const Registration& reg, const PointCloud& pct, const PointCloud& pcs, size_t max_iter, float convergence_threshold, glm::mat3 R, glm::vec3 t);
 
         ~IterativeClosestPoint3D();
 

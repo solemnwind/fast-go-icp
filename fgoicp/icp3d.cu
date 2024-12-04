@@ -52,10 +52,9 @@ namespace icp
     }
 
 
-    IterativeClosestPoint3D::IterativeClosestPoint3D(const Registration& reg, const PointCloud& pct, const PointCloud& pcs, size_t max_iter, float sse_threshold, glm::mat3 R, glm::vec3 t) :
+    IterativeClosestPoint3D::IterativeClosestPoint3D(const Registration& reg, const PointCloud& pct, const PointCloud& pcs, size_t max_iter, float convergence_threshold, glm::mat3 R, glm::vec3 t) :
         reg(reg), nt(pct.size()), ns(pcs.size()), R(R), t(t),
-        max_iter(max_iter), sse_threshold(sse_threshold), 
-        convergence_threshold(0.005)
+        max_iter(max_iter), convergence_threshold(convergence_threshold)
     {
         cudaMalloc((void**)&d_pct_buffer, sizeof(Point3D) * nt);
         cudaMalloc((void**)&d_pcs_buffer, sizeof(Point3D) * ns);

@@ -21,7 +21,7 @@ int main(int argc, char* argv[])
         << "\tSubsample rate: " << config.subsample;
 
     icp::FastGoICP fgoicp(std::move(pct), std::move(pcs), config.mse_threshold);
-    fgoicp.run();
+    auto [R, t] = fgoicp.run();
 
     return 0;
 }
