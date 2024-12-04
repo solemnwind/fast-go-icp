@@ -22,9 +22,7 @@ namespace icp
             mse_threshold(_mse_threshold), // init *mean* squared error threshold 
             sse_threshold(ns * mse_threshold),    // init *sum* of squared error threshold
             stream_pool(32)
-        {
-            
-        };
+        {}
 
         ~FastGoICP() {}
 

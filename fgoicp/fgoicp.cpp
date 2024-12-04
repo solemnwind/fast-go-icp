@@ -24,7 +24,7 @@ namespace icp
 
         Logger(LogLevel::Info) << "Searching over! Best Error: " << best_sse
                                << "\n\tRotation:\n" << best_rotation
-                               << "\n\tTranslation: " << best_translation;
+                               << "\n\tTranslation: " << best_translation / scaling_factor + best_rotation * offset_pcs - offset_pct;
 
         return { best_rotation, best_translation };
     }

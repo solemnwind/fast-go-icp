@@ -58,9 +58,9 @@ namespace icp
         // Number of source cloud points
         const size_t ns;
         // Target point cloud on device
-        const thrust::device_vector<Point3D> d_pct;
+        Point3D* d_pct;
         // Source point cloud on device
-        const thrust::device_vector<Point3D> d_pcs;
+        Point3D* d_pcs;
 
         NearestNeighborLUT nnlut;
         NearestNeighborLUT* d_nnlut;
@@ -69,16 +69,21 @@ namespace icp
         Registration(const PointCloud &_pct, const PointCloud &_pcs, const std::array<std::pair<float, float>, 3> _target_bounds, float lut_resolution) : 
             pct(_pct), pcs(_pcs),                     // init point clouds data (host)
             nt(pct.size()), ns(pcs.size()),           // init number of points
-            d_pct(pct.begin(), pct.end()),            // init target point cloud (device)
-            d_pcs(pcs.begin(), pcs.end()),            // init source point cloud (device)
             nnlut(lut_resolution, _target_bounds, pct)
         {
+            cudaMalloc((void**)&d_pct, sizeof(Point3D) * nt);
+            cudaMalloc((void**)&d_pcs, sizeof(Point3D) * ns);
+            cudaMemcpy(d_pct, pct.data(), sizeof(Point3D) * nt, cudaMemcpyHostToDevice);
+            cudaMemcpy(d_pcs, pcs.data(), sizeof(Point3D) * ns, cudaMemcpyHostToDevice);
+
             cudaMalloc((void**)&d_nnlut, sizeof(NearestNeighborLUT));
             cudaMemcpy(d_nnlut, &nnlut, sizeof(NearestNeighborLUT), cudaMemcpyHostToDevice);
         }
 
         ~Registration()
         {
+            cudaFree(d_pct);
+            cudaFree(d_pcs);
             cudaFree(d_nnlut);
         }
 

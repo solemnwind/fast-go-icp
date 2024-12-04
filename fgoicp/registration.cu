@@ -69,8 +69,8 @@ namespace icp
         dim3 blocks_per_grid((ns + block_size - 1) / block_size);
         kernComputeClosestError <<<blocks_per_grid, threads_per_block>>> (
             ns, nt, R, t,
-            thrust::raw_pointer_cast(d_pcs.data()),
-            thrust::raw_pointer_cast(d_pct.data()),
+            d_pcs,
+            d_pct,
             dev_errors);
         cudaDeviceSynchronize();
         cudaCheckError("kernComputeClosestError");
@@ -110,7 +110,7 @@ namespace icp
             // Launch the kernel with each (R, t) on a different stream
             kernComputeBounds <<<blocks_per_grid, threads_per_block, 0, stream>>> (
                 ns, rnode, tnodes[i], fix_rot,
-                thrust::raw_pointer_cast(d_pcs.data()),
+                d_pcs,
                 d_nnlut,
                 d_upper_bounds + i * ns,
                 d_lower_bounds + i * ns);
