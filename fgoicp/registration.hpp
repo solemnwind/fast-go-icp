@@ -62,20 +62,19 @@ namespace icp
         // Source point cloud on device
         Point3D* d_pcs;
 
-        NearestNeighborLUT nnlut;
         NearestNeighborLUT* d_nnlut;
 
     public:
         Registration(const PointCloud &_pct, const PointCloud &_pcs, const std::array<std::pair<float, float>, 3> _target_bounds, float lut_resolution) : 
             pct(_pct), pcs(_pcs),                     // init point clouds data (host)
-            nt(pct.size()), ns(pcs.size()),           // init number of points
-            nnlut(lut_resolution, _target_bounds, pct)
+            nt(pct.size()), ns(pcs.size())            // init number of points
         {
             cudaMalloc((void**)&d_pct, sizeof(Point3D) * nt);
             cudaMalloc((void**)&d_pcs, sizeof(Point3D) * ns);
             cudaMemcpy(d_pct, pct.data(), sizeof(Point3D) * nt, cudaMemcpyHostToDevice);
             cudaMemcpy(d_pcs, pcs.data(), sizeof(Point3D) * ns, cudaMemcpyHostToDevice);
 
+            NearestNeighborLUT nnlut(lut_resolution, _target_bounds, pct);
             cudaMalloc((void**)&d_nnlut, sizeof(NearestNeighborLUT));
             cudaMemcpy(d_nnlut, &nnlut, sizeof(NearestNeighborLUT), cudaMemcpyHostToDevice);
         }
