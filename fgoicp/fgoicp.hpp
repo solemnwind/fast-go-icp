@@ -10,13 +10,13 @@ namespace icp
     class FastGoICP
     {
     public:
-        FastGoICP(std::vector<glm::vec3> _pct, std::vector<glm::vec3> _pcs, float _mse_threshold) : 
+        FastGoICP(std::vector<glm::vec3> _pct, std::vector<glm::vec3> _pcs, float _lut_resolution, float _mse_threshold) : 
             pcs(_pcs), pct(_pct), ns{pcs.size()}, nt{pct.size()},
             offset_pcs(center_point_cloud(pcs)),
             offset_pct(center_point_cloud(pct)),
             scaling_factor(scale_point_clouds(pct, pcs)),
             target_bounds(get_point_cloud_ranges(pct)),
-            registration{pct, pcs, target_bounds, 0.03},
+            registration{pct, pcs, target_bounds, _lut_resolution},
             max_iter(10), best_sse(M_INF), 
             best_rotation(1.0f), best_translation(0.0f),
             mse_threshold(_mse_threshold), // init *mean* squared error threshold 

@@ -116,6 +116,8 @@ namespace icp
                 d_lower_bounds + i * ns);
         }
 
+        cudaCheckError("kernComputeBounds");
+
         // Reduce the lower/upper bounds for each pair
         for (size_t i = 0; i < num_transforms; ++i) {
             // Thrust reduce launching parameters
@@ -137,6 +139,8 @@ namespace icp
                 thrust::plus<float>()
             );
         }
+
+        cudaCheckError("thrust::reduce");
 
         cudaDeviceSynchronize();
 
@@ -177,12 +181,22 @@ namespace icp
         resolution(resolution), 
         target_bounds(_target_bounds),
         d_cudaArray(nullptr), 
-        d_lutData(nullptr),
         texObj(0)
     {
         dims = make_int3(ceil((target_bounds[0].second - target_bounds[0].first) / resolution),
                          ceil((target_bounds[1].second - target_bounds[1].first) / resolution),
                          ceil((target_bounds[2].second - target_bounds[2].first) / resolution));
+
+        
+        if (dims.x >= 2048 || dims.y >= 2048 || dims.z >= 2048)
+        {
+            Logger(LogLevel::Error) << "Dims " << dims.x << ", " << dims.y << ", " << dims.z << " exceeds CUDA limit";
+        }
+        else if (dims.x >=  1024|| dims.y >= 1024 || dims.z >= 1024)
+        {
+            Logger(LogLevel::Warning) << "Dims " << dims.x << ", " << dims.y << ", " << dims.z << " is large and could run out of vRAM, consider a lower LUT resolution";
+        }
+
         // Calculate scale factors and offsets based on target_bounds
         scale = 1.0f / resolution;
         offset.x = -target_bounds[0].first;
@@ -231,11 +245,6 @@ namespace icp
             cudaFreeArray(d_cudaArray);
             d_cudaArray = nullptr;
         }
-        if (d_lutData)
-        {
-            cudaFree(d_lutData);
-            d_lutData = nullptr;
-        }
     }
 
     __device__ __host__ inline float distance_squared(const float3& u, const float3& v)
@@ -276,8 +285,6 @@ namespace icp
         int numPoints = pc.size();
         thrust::host_vector<float3> h_points(numPoints);
 
-
-
         // Transform points into LUT space
         for (int i = 0; i < numPoints; ++i)
         {
@@ -290,6 +297,7 @@ namespace icp
 
         thrust::device_vector<float3> d_points = h_points;
 
+        float* d_lutData;
         cudaMalloc(&d_lutData, dims.x * dims.y * dims.z * sizeof(float));
 
         dim3 blockSize(8, 8, 8);
@@ -305,6 +313,8 @@ namespace icp
         copyParams.extent = make_cudaExtent(dims.x, dims.y, dims.z);
         copyParams.kind = cudaMemcpyDeviceToDevice;
         cudaMemcpy3D(&copyParams);
+
+        cudaFree(d_lutData);
     }
 
     __device__ float NearestNeighborLUT::search(const float3 query) const
