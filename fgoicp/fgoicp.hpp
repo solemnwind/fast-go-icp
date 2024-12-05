@@ -84,6 +84,11 @@ namespace icp
         float scale_point_clouds(PointCloud& pct, PointCloud& pcs);
         std::array<std::pair<float, float>, 3> get_point_cloud_ranges(PointCloud& pc);
 
+        glm::vec3 restore_translation(glm::mat3 _R, glm::vec3 _t)
+        {
+            return _t / scaling_factor + _R * offset_pcs - offset_pct;
+        }
+
         using ResultBnBR3 = std::tuple<float, glm::vec3>;
 
         /**

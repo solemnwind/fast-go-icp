@@ -88,18 +88,23 @@ namespace icp
         size_t iter = 0;
         float sse = M_INF;
         float last_sse = 2.0f * M_INF;
+        glm::mat3 last_R;
+        glm::vec3 last_t;
         // Stop when max_iter is reached OR sse improvement is minor
         while (iter++ < max_iter && (last_sse - sse) > convergence_threshold * last_sse)
         {
+            last_sse = sse;
+            last_R = R;
+            last_t = t;
             auto [R_, t_] = procrustes();
             kernRotateTranslateInplace <<<blocks_per_grid, threads_per_block>>> (ns, R_, t_, d_pcs_buffer);
             R = R_ * R;
             t = R_ * t + t_;
-            last_sse = sse;
             sse = reg.compute_sse_error(R, t);
         }
 
-        return { sse, R, t };
+        return sse < last_sse ? std::tuple{ sse, R, t }
+                              : std::tuple{ last_sse, last_R, last_t };
     }
 
     glm::mat3 closest_orthogonal_approximation(glm::mat3 ABt)

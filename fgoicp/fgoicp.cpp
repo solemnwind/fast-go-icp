@@ -24,9 +24,9 @@ namespace icp
 
         Logger(LogLevel::Info) << "Searching over! Best Error: " << best_sse
                                << "\n\tRotation:\n" << best_rotation
-                               << "\n\tTranslation: " << best_translation / scaling_factor + best_rotation * offset_pcs - offset_pct;
+                               << "\n\tTranslation: " << restore_translation(best_rotation, best_translation);
 
-        return { best_rotation, best_translation };
+        return { best_rotation, restore_translation(best_rotation, best_translation)};
     }
 
     float FastGoICP::branch_and_bound_SO3()
@@ -71,7 +71,7 @@ namespace icp
                 last_rotation = child_rnode.q.R;
                 last_translation = best_t;
 
-                if (ub < best_sse * 1.5)
+                if (ub < best_sse * 1.8)
                 {
                     IterativeClosestPoint3D icp3d(registration, pct, pcs, 100, 0.005, child_rnode.q.R, best_t);
                     auto [icp_sse, icp_R, icp_t] = icp3d.run();
@@ -80,11 +80,11 @@ namespace icp
                     {
                         best_sse = icp_sse;
                         best_rotation = icp_R;
-                        best_translation = icp_t / scaling_factor + icp_R * offset_pcs - offset_pct;
-                    }
-                    Logger(LogLevel::Debug) << "New best error: " << best_sse << "\n"
-                        << "\tRotation:\n" << best_rotation << "\n"
-                        << "\n\tTranslation: " << best_translation;
+                        best_translation = icp_t;
+                    } 
+                    Logger(LogLevel::Debug) << "New best error: " << best_sse
+                        << "\n\tRotation:\n" << best_rotation
+                        << "\n\tTranslation: " << restore_translation(best_rotation, best_translation);
                 }
 
                 auto [lb, _] = branch_and_bound_R3(child_rnode, false);

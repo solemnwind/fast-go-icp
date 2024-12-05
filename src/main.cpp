@@ -16,9 +16,9 @@ int main(int argc, char* argv[])
 
     std::vector<glm::vec3> pct, pcs;
     load_cloud(config.io.target, config.subsample, pct);
-    icp::Logger(icp::LogLevel::Info) << "Target point cloud loaded from " << config.io.target;
+    icp::Logger(icp::LogLevel::Info) << "Target point cloud (" << pct.size() << ") loaded from " << config.io.target;
     load_cloud(config.io.source, config.subsample, pcs);
-    icp::Logger(icp::LogLevel::Info) << "Source point cloud loaded from " << config.io.source;
+    icp::Logger(icp::LogLevel::Info) << "Source point cloud (" << pcs.size() << ") loaded from " << config.io.source;
 
     icp::FastGoICP fgoicp(std::move(pct), std::move(pcs), config.mse_threshold);
     auto [R, t] = fgoicp.run();
