@@ -18,10 +18,6 @@
 class Config
 {
 public:
-    bool trim;
-    float subsample;
-    float mse_threshold;
-
     struct IO
     {
         std::string target;        // target point cloud ply path
@@ -30,31 +26,35 @@ public:
         std::string visualization; // visualization ply path
     } io;
 
-    // Not using yet
-    struct Rotation
+    struct Params
     {
-        float xmin, xmax;
-        float ymin, ymax;
-        float zmin, zmax;
-    } rotation;
-
-    // Not using yet
-    struct Translation
-    {
-        float xmin, xmax;
-        float ymin, ymax;
-        float zmin, zmax;
-    } translation;
+        bool trim;
+        float target_subsample;
+        float source_subsample;
+        float lut_resolution;
+        float mse_threshold;
+    } params;
 
     Config::Config(const string toml_filepath)
-        : trim(false), subsample(1.0f), mse_threshold(1e-5f),
-        io{ "", "", "", "" },
-        rotation{ 0, 0, 0, 0, 0, 0 },
-        translation{ 0, 0, 0, 0, 0, 0 }
     {
         string base_filename = toml_filepath.substr(toml_filepath.find_last_of("/\\") + 1);
         icp::Logger(icp::LogLevel::Info) << "Reading configurations from " << base_filename;
         parse_toml(toml_filepath);
+        icp::Logger(icp::LogLevel::Info) << *this;
+    }
+
+    friend std::ostream& operator<<(std::ostream& os, const Config& config) {
+        os << "Fast Go-ICP Configurations\n"
+            << "\tIO Configuration:\n"
+            << "\t\tTarget: " << config.io.target << "\n"
+            << "\t\tSource: " << config.io.source << "\n"
+            << "\tParameters:\n"
+            << "\t\tTrim: " << (config.params.trim ? "true" : "false") << "\n"
+            << "\t\tTarget Subsample: " << config.params.target_subsample << "\n"
+            << "\t\tSource Subsample: " << config.params.source_subsample << "\n"
+            << "\t\tLUT Resolution: " << config.params.lut_resolution << "\n"
+            << "\t\tMSE Threshold: " << config.params.mse_threshold;
+        return os;
     }
 
 private:
@@ -73,8 +73,8 @@ private:
             err_msg += "': ";
             err_msg += err.description();
             err_msg += "\n";
-
-            throw std::runtime_error(err_msg);
+            icp::Logger(icp::LogLevel::Error) << err_msg;
+            exit(1);
         }
 
         // Parse IO section
@@ -91,37 +91,17 @@ private:
         if (tbl.contains("params"))
         {
             auto params_section = tbl["params"];
-            trim = params_section["trim"].value_or(false);
-            subsample = params_section["subsample"].value_or(1.0f);
-            mse_threshold = params_section["mse_threshold"].value_or(1e-5f);
+            params.trim = params_section["trim"].value_or(false);
+            params.target_subsample = params_section["target_subsample"].value_or(1.0f);
+            params.source_subsample = params_section["source_subsample"].value_or(1.0f);
+            params.lut_resolution = params_section["lut_resolution"].value_or(0.005f);
+            params.mse_threshold = params_section["mse_threshold"].value_or(1e-3f);
 
             // Check bounding conditions
-            subsample = clamp(subsample, 0.0f, 1.0f);
-            mse_threshold = clamp(mse_threshold, 1e-10f, INFINITY);
-        }
-
-        // Parse Rotation section
-        if (tbl.contains("params") && tbl["params"].as_table()->contains("rotation"))
-        {
-            auto rotation_section = tbl["params"]["rotation"];
-            rotation.xmin = rotation_section["xmin"].value_or(-1.0f);
-            rotation.xmax = rotation_section["xmax"].value_or(1.0f);
-            rotation.ymin = rotation_section["ymin"].value_or(-1.0f);
-            rotation.ymax = rotation_section["ymax"].value_or(1.0f);
-            rotation.zmin = rotation_section["zmin"].value_or(-1.0f);
-            rotation.zmax = rotation_section["zmax"].value_or(1.0f);
-        }
-
-        // Parse Translation section
-        if (tbl.contains("params") && tbl["params"].as_table()->contains("translation"))
-        {
-            auto translation_section = tbl["params"]["translation"];
-            translation.xmin = translation_section["xmin"].value_or(-1.0f);
-            translation.xmax = translation_section["xmax"].value_or(1.0f);
-            translation.ymin = translation_section["ymin"].value_or(-1.0f);
-            translation.ymax = translation_section["ymax"].value_or(1.0f);
-            translation.zmin = translation_section["zmin"].value_or(-1.0f);
-            translation.zmax = translation_section["zmax"].value_or(1.0f);
+            params.target_subsample = clamp(params.target_subsample, 1e-5f, 1.0f);
+            params.source_subsample = clamp(params.source_subsample, 1e-5f, 1.0f);
+            params.source_subsample = clamp(params.source_subsample, 1e-5f, 0.5f);
+            params.mse_threshold = clamp(params.mse_threshold, 1e-12f, INFINITY);
         }
     }
 };

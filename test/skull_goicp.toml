@@ -1,10 +1,7 @@
 # Example Configurations for Fast Globally Optimal Iterative Closest Point (FGOICP)
 
 [info]
-authors = ["Mufeng Xu"]
-affiliation = "GRASP Lab, University of Pennsylvania"
-version = "0.1"
-description = "Register data point cloud with model point cloud"
+version = "0.2"
 
 [io]
 target = "../data/artec3d/model_skull.ply"    # target (reference) point cloud
@@ -13,29 +10,9 @@ output = "output.toml"                      # output file: R, t, MSE
 visualization = "viz.ply"                   # visualization ply file, set to "" to skip
 
 [params]
-mode = 4                                  # 0: ICP on CPU; 1: ICP on GPU; 2: ICP w. kdTree on GPU; 3: Go-ICP on CPU; 4: Go-ICP on GPU
+mode = 4                                    # 0: ICP on CPU; 1: ICP on GPU; 2: ICP w. kdTree on GPU; 3: Go-ICP on CPU; 4: Go-ICP on GPU
 trim = true                                 # perform trimming
-subsample = 0.05                             # subsample the source point cloud
+target_subsample = 0.03                     # subsample the target point cloud
+source_subsample = 0.1                      # subsample the source point cloud
+lut_resolution = 0.005                      # resolution of the nearest distance LUT
 mse_threshold = 1e-3                        # MSE threshold for convergence
-resize = 0.01
-
-# Search over Rotational Space SO(3)
-[params.rotation]                           # search space in SO(3)
-xmin = -180
-xmax = 180
-ymin = -180
-ymax = 180
-zmin = -180
-zmax = 180
-search_depth = 12
-
-# Search over Translational Space R(3)
-[params.translation]                        # search space in R(3)
-# Normalized to -1.0 ~ 1.0
-xmin = -1.0
-xmax = 1.0
-ymin = -1.0
-ymax = 1.0
-zmin = -1.0
-zmax = 1.0
-search_depth = 12

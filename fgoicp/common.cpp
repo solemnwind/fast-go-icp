@@ -2,6 +2,8 @@
 
 namespace icp
 {
+    bool Logger::verbose_ = false;
+
     void cudaCheckError(string info, bool silent)
     {
 #if CUDA_DEBUG

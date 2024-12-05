@@ -211,6 +211,11 @@ namespace icp
         // Destructor: automatically flushes and prints the log when the object goes out of scope
         ~Logger() 
         {
+            if (level_ == LogLevel::Debug && !verbose_) 
+            {
+                return; // Skip Debug logs if quiet mode is enabled
+            }
+
             std::string color, prefix;
             switch (level_) 
             {
@@ -235,9 +240,16 @@ namespace icp
             std::cout << color << prefix << buffer_.str() << "\033[0m" << "\n";
         }
 
+        static void set_verbose(bool verbose)
+        {
+            verbose_ = verbose;
+        }
+
     private:
         LogLevel level_;
         std::ostringstream buffer_;
+
+        static bool verbose_;
 
         // Helper function to get the current timestamp
         std::string get_current_time() 

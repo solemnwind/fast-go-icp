@@ -38,3 +38,5 @@ ninja
 # IDE Configurations
 .vscode
 /.vs
+*.log
+*.log
