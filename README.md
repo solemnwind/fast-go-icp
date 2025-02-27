@@ -9,25 +9,16 @@
 ## Demo
 
 <div style="display: flex; justify-content: space-around;">
-  <img src="imgs/fgoicp-bunny.gif" alt="Bunny" width="150" />
-  <img src="imgs/fgoicp-skull.gif" alt="Skull" width="150" />
-  <img src="imgs/fgoicp-spanner.gif" alt="Spanner" width="150" />
+  <img src="imgs/fgoicp-bunny.gif" alt="Bunny" width="200" />
+  <img src="imgs/fgoicp-skull.gif" alt="Skull" width="200" />
+  <img src="imgs/fgoicp-spanner.gif" alt="Spanner" width="200" />
 </div>
-
 
 ## Introduction
 
 This project implements CUDA acceleration for ICP: the classic point cloud registration algorithm, and its globally optimal improvement, Go-ICP. The project also provides tools for visualization and performance measurement in [this repo](https://github.com/zjsun1017/CUDA-Go-ICP).
 
 ## Algorithm
-
-<!-- Idea to describe the algorithm:
-- Draw a contour of a rough terrain with lots of local minima
-- Draw grids
-- Draw arrows indicating the steps of ICP, which marches towards the local minima
-- Eliminate grids that have lower bound worse than the optimal error now
-- Draw finer grids and repeat
- -->
 
 The key algorithm in the globally optimal ICP problem is **Branch-and-Bound** (BnB),
 global minimum is searched in the $SE(3)$ space (3D Rigid Rotation and Translation), which is 6-dimensional.
@@ -36,6 +27,11 @@ Instead of directly searching over $SE(3)$, it is proposed to launch an outer-Bn
 which searches over the $SO(3)$ space (3D Rotation) with BnB algorithm,
 and for each branch, an inner-BnB function, which searches over the $\mathbb{R}^3$ space,
 will be invoked.
+
+Our CUDA acceleration focus on:
+- Procrustes analysis in the ICP algorithm
+- Nearest neighbor searfch
+- Upper/Lower bounds (registration error) computation
 
 ## Dependencies
 
